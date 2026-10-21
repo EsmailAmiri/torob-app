@@ -1,4 +1,6 @@
 // Owner-private Sites bootstrap. Supply the service token through hidden stdin only.
+import { readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 let request = "";
 if (process.stdin.isTTY) {
   process.stdin.setRawMode(true);
@@ -46,6 +48,54 @@ async function call(path, body) {
 }
 let health = await call("/api/health");
 if (!health.catalogueReady) {
+  const files = (await readdir("public/data")).filter((name) =>
+    /^(products-[a-f0-9]{2}|shops|search)\.json\.gz$/.test(name),
+  );
+  let assetNext = 0,
+    assetDone = 0;
+  await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      while (assetNext < files.length) {
+        const name = files[assetNext++];
+        const bytes = await readFile("public/data/" + name);
+        const hash = createHash("sha256").update(bytes).digest("hex");
+        let success = false;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            const r = await fetch(
+              new URL(
+                "/api/admin/assets?name=" + encodeURIComponent(name),
+                origin,
+              ),
+              {
+                method: "POST",
+                headers: {
+                  "OAI-Sites-Authorization": "Bearer " + token,
+                  "Content-Type": "application/octet-stream",
+                  "X-Content-Sha256": hash,
+                },
+                body: bytes,
+                signal: AbortSignal.timeout(180000),
+              },
+            );
+            const result = await r.json();
+            if (!r.ok) throw Error(result.error || "Asset upload failed");
+            success = true;
+            break;
+          } catch (e) {
+            if (attempt === 3) throw e;
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+        }
+        if (!success) throw Error("Asset upload incomplete");
+        assetDone++;
+        if (assetDone % 16 === 0 || assetDone === files.length)
+          console.log(
+            `Uploaded ${assetDone}/${files.length} catalogue objects`,
+          );
+      }
+    }),
+  );
   await call("/api/admin/import", { shard: "shops" });
   console.log("Shops imported");
   const shards = Array.from({ length: 256 }, (_, i) =>

@@ -74,7 +74,7 @@ npm run data
 
 SQLite محلی در `runtime/torob.sqlite` ساخته می‌شود. FTS5 با یکسان‌سازی نویسه‌ها و اعداد فارسی/عربی، جست‌وجوی سمت سرور، فیلتر بودجه و مرتب‌سازی را اجرا می‌کند. هنگام آماده بودن API، مرورگر ایندکس بزرگ جست‌وجو را دریافت نمی‌کند. Web Worker به عنوان fallback نبود دیتابیس کامل روی میزبان باقی است.
 
-در Sites، D1 ایندکس، فروشگاه‌ها و گفتگوها را نگه می‌دارد؛ مشخصات و آفرهای محصولات هنگام نیاز از asset همان بخش خوانده می‌شوند تا داده حجیم در SQL تکثیر نشود.
+در Sites، D1 ایندکس، فروشگاه‌ها و گفتگوها را نگه می‌دارد؛ فایل‌های کامل کاتالوگ در R2 همان سایت ذخیره و با checksum منتقل می‌شوند. مشخصات و آفرها هنگام نیاز از بخش متناظر R2 خوانده می‌شوند تا داده حجیم در SQL تکثیر نشود. بسته انتشار فقط کد، رابط و داده‌های کوچک اولیه را دارد؛ فایل‌های اصلی در سورس محلی و مخزن حفظ شده‌اند.
 
 ## رابط
 
@@ -99,11 +99,11 @@ SQLite محلی در `runtime/torob.sqlite` ساخته می‌شود. FTS5 با 
 | `POST /api/inquiries`              | ایجاد استعلام آزمایشی                                     |
 | `POST /api/inquiries/:id/simulate` | ثبت پاسخ فرضی صریح                                        |
 
-`POST /api/admin/import` فقط برای bootstrap نسخه خصوصی Sites است. به `CATALOG_IMPORT_ENABLED=true` نیاز دارد و asset معتبر `shops` یا `00` تا `ff` را وارد می‌کند. پس از کامل‌شدن کاتالوگ، نوشتن دوباره متوقف می‌شود. این مسیر را بدون احراز هویت پلتفرم عمومی نکنید.
+مسیرهای `POST /api/admin/assets` و `POST /api/admin/import` فقط برای bootstrap نسخه خصوصی Sites هستند. به `CATALOG_IMPORT_ENABLED=true` نیاز دارند؛ ابتدا فایل‌های gzip با نام معتبر و checksum به R2 فرستاده می‌شوند و سپس بخش `shops` یا `00` تا `ff` وارد D1 می‌شود. اسکریپت `scripts/import-hosted.mjs` با توکن سرویس از stdin مخفی این کار را انجام می‌دهد و امکان تلاش دوباره دارد. پس از کامل‌شدن کاتالوگ، نوشتن دوباره متوقف می‌شود. این مسیرها را بدون احراز هویت پلتفرم عمومی نکنید.
 
 ## انتشار و migration
 
-`npm run build` خروجی Worker و React را در `dist/server` و `dist/client` تولید می‌کند و integration رسمی `sites()` حفظ شده است. همان شناسه Site و audience خصوصی قبلی استفاده می‌شوند. binding دیتابیس D1 با نام `DB` در `.openai/hosting.json` است. Node و Worker از API و repository مشترک استفاده می‌کنند.
+`npm run build` خروجی Worker و React را در `dist/server` و `dist/client` تولید می‌کند و integration رسمی `sites()` حفظ شده است. همان شناسه Site و audience خصوصی قبلی استفاده می‌شوند. binding دیتابیس D1 با نام `DB` و ذخیره‌ساز R2 با نام `BUCKET` در `.openai/hosting.json` است. Node و Worker از API و repository مشترک استفاده می‌کنند. `npm run build:node` همچنان تمام فایل‌های دیتاست را برای اجرای محلی در خروجی نگه می‌دارد.
 
 اسکیما در `db/schema.ts` و migration در `drizzle` است؛ FTS5 و triggerها در SQL اولیه ثبت شده‌اند. migration اعمال‌شده را تغییر ندهید. برای تغییر بعدی، schema را ویرایش، `npm run db:generate` اجرا و migration جدید را بررسی کنید. seed دیتاست از migration جداست. `npm run db:seed`، migrationهای جدید محلی و سپس ورود داده را انجام می‌دهد.
 

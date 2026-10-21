@@ -16,7 +16,7 @@ export default defineConfig({
           binding: "ASSETS",
           directory: "./dist/client",
           not_found_handling: "single-page-application",
-          run_worker_first: ["/api/*"],
+          run_worker_first: ["/api/*", "/data/*"],
         },
         d1_databases: [
           {
@@ -26,6 +26,7 @@ export default defineConfig({
             migrations_dir: "drizzle",
           },
         ],
+        r2_buckets: [{ binding: "BUCKET", bucket_name: "torob-catalogue" }],
       },
       inspectorPort: false,
     }),
