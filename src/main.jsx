@@ -47,6 +47,9 @@ import {
   Wallet,
   Home as HomeIcon,
   Trash2,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import {
   fa,
@@ -61,6 +64,9 @@ import {
   readCompressed,
 } from "./catalogue";
 import "./style.css";
+import { api, setBackendReady, threadId, newThread } from "./api";
+import { useTheme } from "./theme";
+import "./dark.css";
 
 const categories = [
   { name: "گوشی موبایل", icon: Smartphone },
@@ -263,6 +269,53 @@ function MapView({ offers, center, onSelect }) {
 }
 
 function App() {
+  const { theme, resolved, setTheme, toggleTheme } = useTheme();
+  const [backendInfo, setBackendInfo] = useState(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [failedRequest, setFailedRequest] = useState(null);
+  const conversation = useRef(threadId());
+  const chatGeneration = useRef(0);
+  const chatController = useRef(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    api("/health", { signal: controller.signal })
+      .then((info) => {
+        setBackendInfo(info);
+        setBackendReady(info.catalogueReady);
+      })
+      .catch((e) => {
+        if (e.name !== "AbortError")
+          setBackendInfo({ ok: false, assistant: { provider: "offline" } });
+      });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (!backendInfo?.ok) return;
+    let active = true;
+    const generation = chatGeneration.current;
+    api("/chat/" + conversation.current)
+      .then((data) => {
+        if (!active || generation !== chatGeneration.current) return;
+        if (data.messages?.length)
+          setMessages([initialMessage, ...data.messages]);
+        const c = data.context;
+        if (c && new URLSearchParams(location.search).get("q") === c.query) {
+          setBudget(c.budget == null ? "" : String(c.budget));
+          setBrand(c.brand);
+          if (places[c.place]) setPlace(c.place);
+          setRadius(c.radius);
+          setInstallment(c.installment);
+          setOnlyOpen(c.onlyOpen);
+          setSort(c.sort);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [backendInfo?.ok]);
+  useEffect(() => () => chatController.current?.abort(), []);
+
   const [page, setPage] = useState(
     new URLSearchParams(location.search).has("q") ? "results" : "home",
   );
@@ -354,9 +407,35 @@ function App() {
     return () => controller.abort();
   }, [page]);
   useEffect(() => {
-    if (page !== "results") return;
+    if (page !== "results" || backendInfo === null) return;
     setLoading(true);
     setError("");
+    if (backendInfo?.catalogueReady) {
+      const controller = new AbortController();
+      const current = ++requestId.current;
+      const params = new URLSearchParams({
+        query: deferredQuery,
+        brand,
+        sort,
+        limit: "60",
+      });
+      if (Number(budget) > 0) params.set("budget", budget);
+      api("/products?" + params, { signal: controller.signal })
+        .then((data) => {
+          if (current === requestId.current) {
+            setProducts(data.products);
+            setTotal(data.total);
+            setLoading(false);
+          }
+        })
+        .catch((e) => {
+          if (e.name !== "AbortError" && current === requestId.current) {
+            setError(e.message);
+            setLoading(false);
+          }
+        });
+      return () => controller.abort();
+    }
     if (!worker.current) {
       worker.current = new Worker("/search-worker.js");
       worker.current.onmessage = ({ data }) => {
@@ -381,7 +460,7 @@ function App() {
       brand,
       sort,
     });
-  }, [page, deferredQuery, budget, brand, sort]);
+  }, [page, deferredQuery, budget, brand, sort, backendInfo]);
   useEffect(() => () => worker.current?.terminate(), []);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -497,76 +576,87 @@ function App() {
       { timeout: 10000 },
     );
   }
-  function sendChat(text) {
+  async function sendChat(text, retryRequest) {
     const input = (text || chatText).trim();
-    if (!input) return;
+    if ((!input && !retryRequest) || chatBusy) return;
+    const request = retryRequest || {
+      threadId: conversation.current,
+      requestId: crypto.randomUUID(),
+      message: input,
+      context: {
+        query,
+        budget: Number(budget) > 0 ? Number(budget) : null,
+        brand,
+        place,
+        radius: Number(radius),
+        installment,
+        onlyOpen,
+        sort,
+        selectedId: selected?.id || null,
+        compareIds: compare.map((p) => p.id),
+      },
+    };
+    const generation = chatGeneration.current;
     setChatText("");
     setAssistantOpen(true);
-    const intent = parseRequest(input);
-    let answers = [];
-    if (intent.query) {
-      goSearch(intent.query);
-      answers.push(`محصولات «${intent.query}» رو از دیتاست پیدا می‌کنم.`);
+    setChatBusy(true);
+    setFailedRequest(null);
+    if (!retryRequest)
+      setMessages((old) => [...old, { role: "user", text: input }]);
+    chatController.current = new AbortController();
+    try {
+      const reply = await api("/chat", {
+        method: "POST",
+        body: JSON.stringify(request),
+        signal: chatController.current.signal,
+      });
+      if (generation !== chatGeneration.current) return;
+      for (const action of reply.actions || []) {
+        if (action.type === "search") {
+          const f = action.filters || {};
+          if (f.query !== undefined) goSearch(f.query);
+          if (f.budget !== undefined)
+            setBudget(f.budget == null ? "" : String(f.budget));
+          if (f.brand !== undefined) setBrand(f.brand);
+          if (f.place && places[f.place]) {
+            setPlace(f.place);
+            setCustomPosition(null);
+          }
+          if (f.radius !== undefined) setRadius(f.radius);
+          if (f.installment !== undefined) setInstallment(f.installment);
+          if (f.onlyOpen !== undefined) setOnlyOpen(f.onlyOpen);
+          if (f.sort) setSort(f.sort);
+        } else if (action.type === "select" && action.product?.id) {
+          setSelected(action.product);
+          setView("products");
+        } else if (action.type === "compare" && action.products?.length >= 2) {
+          setCompare(action.products.slice(0, 3));
+          setCompareOpen(true);
+        }
+      }
+      setMessages((old) => [
+        ...old,
+        {
+          role: "assistant",
+          text: reply.text,
+          provider: reply.provider,
+          tools: reply.tools,
+        },
+      ]);
+    } catch (e) {
+      if (e.name !== "AbortError" && generation === chatGeneration.current)
+        setFailedRequest({ request, error: e.message });
+    } finally {
+      if (generation === chatGeneration.current) setChatBusy(false);
     }
-    if (intent.budget !== undefined) {
-      setBudget(String(intent.budget));
-      answers.push(
-        `سقف بودجه روی ${money(intent.budget)} تنظیم شد؛ محصولات بدون قیمت از این فیلتر عبور نمی‌کنند.`,
-      );
-    }
-    if (intent.place) {
-      setPlace(intent.place);
-      setCustomPosition(null);
-      answers.push(
-        `محدوده مراجعه ${intent.place} شد. فاصله‌ها از مرکز این محدوده محاسبه می‌شن.`,
-      );
-    }
-    if (intent.brand) {
-      setBrand(intent.brand);
-      answers.push(`برند ${intent.brand} رو انتخاب کردم.`);
-    }
-    if (intent.installment !== undefined) {
-      setInstallment(intent.installment);
-      answers.push(
-        intent.installment
-          ? "در فهرست فروشندگان، فقط موارد دارای اطلاعات سرویس اعتباری نمایش داده می‌شن. حضوری بودن پذیرندگی ممکنه نامشخص باشه."
-          : "فیلتر شرایط پرداخت برداشته شد.",
-      );
-    }
-    if (intent.sort) {
-      setSort(intent.sort);
-      answers.push("محصولات بر اساس کمترین قیمت ثبت‌شده مرتب شدن.");
-    }
-    if (intent.near && !intent.place)
-      answers.push(
-        `محدوده فعلی ${place} است؛ برای نزدیک‌تر شدن نتایج، محله‌ات رو انتخاب کن.`,
-      );
-    if (/مقایسه/.test(input)) {
-      if (compare.length >= 2) {
-        setCompareOpen(true);
-        answers.push("جدول مقایسه محصولات انتخابی باز شد.");
-      } else
-        answers.push(
-          "روی علامت مقایسه دو یا سه کارت محصول بزن؛ بعد مشخصات و قیمتشون رو کنار هم می‌بینیم.",
-        );
-    }
-    if (/موجود|تماس|استعلام|پیگیری/.test(input))
-      answers.push(
-        "شماره‌های این دیتاست جعلی‌اند؛ تماس واقعی انجام نمی‌دم. یک محصول رو باز کن تا فروشنده‌ها و استعلام آزمایشیِ مشخص رو ببینی. آفر ثبت‌شده تأیید موجودی نیست.",
-      );
-    if (/بازی|عکاسی|دانشجو|دوربین خوب/.test(input))
-      answers.push(
-        "برای انتخاب دقیق، کاربردت رو با مشخصات ثبت‌شده مقایسه کن. جزئیات هر محصول و جدول مقایسه در دسترسه؛ من بدون داده، کیفیت یا سازگاری رو تضمین نمی‌کنم.",
-      );
-    if (!answers.length)
-      answers.push(
-        "می‌تونم محصول، بودجه، برند و محدوده رو در نتایج تغییر بدم. مثلاً بگو «گوشی سامسونگ تا ۳۰ میلیون نزدیک جمهوری»؛ برای بررسی فنی هم از مقایسه محصولات استفاده کن.",
-      );
-    setMessages((old) => [
-      ...old,
-      { role: "user", text: input },
-      { role: "assistant", text: answers.join("\n\n") },
-    ]);
+  }
+  function resetConversation() {
+    chatGeneration.current++;
+    chatController.current?.abort();
+    conversation.current = newThread();
+    setChatBusy(false);
+    setFailedRequest(null);
+    setMessages([initialMessage]);
   }
   const offerRows = useMemo(() => {
     if (!detail || !shops) return [];
@@ -607,6 +697,34 @@ function App() {
     radius < 30 && `تا ${fa(radius)} کیلومتر`,
   ].filter(Boolean);
   function simulate(o, status) {
+    if (backendInfo?.catalogueReady && selected) {
+      const id = crypto.randomUUID();
+      api("/inquiries", {
+        method: "POST",
+        body: JSON.stringify({
+          threadId: conversation.current,
+          requestId: id,
+          productId: selected.id,
+          offerId: o.id,
+        }),
+      })
+        .then(() =>
+          api("/inquiries/" + id + "/simulate", {
+            method: "POST",
+            body: JSON.stringify({
+              status:
+                status === "available"
+                  ? "available_demo"
+                  : status === "unavailable"
+                    ? "unavailable_demo"
+                    : "noanswer_demo",
+            }),
+          }),
+        )
+        .catch(() =>
+          notify("سناریو فقط در همین صفحه ثبت شد؛ ذخیره سمت سرور انجام نشد."),
+        );
+    }
     setSimulations((old) => ({ ...old, [o.id]: status }));
     if (status === "unavailable")
       setMessages((old) => [
@@ -673,6 +791,17 @@ function App() {
             </nav>
           )}
           <div className="header-actions">
+            <button
+              className="icon-button theme-toggle"
+              onClick={toggleTheme}
+              aria-label={
+                resolved === "dark" ? "فعال کردن تم روشن" : "فعال کردن تم تاریک"
+              }
+              aria-pressed={resolved === "dark"}
+              title={resolved === "dark" ? "تم روشن" : "تم تاریک"}
+            >
+              {resolved === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
             <button
               className="location-button"
               onClick={() => setModal("location")}
@@ -1352,7 +1481,7 @@ function App() {
                 </div>
                 <button
                   className="icon-button"
-                  onClick={() => setMessages([initialMessage])}
+                  onClick={resetConversation}
                   aria-label="شروع گفت‌وگوی تازه"
                 >
                   <RotateCcw size={15} />
@@ -1398,6 +1527,34 @@ function App() {
                       </span>
                     ) : null}
                     <p>{m.text}</p>
+                    {m.tools?.length ? (
+                      <div className="tool-results">
+                        {m.tools.map((tool, i) => (
+                          <span
+                            key={i}
+                            className={
+                              tool.status === "error" ? "tool-error" : ""
+                            }
+                          >
+                            <CheckCircle2 size={11} />
+                            {{
+                              search_products: "جست‌وجوی محصولات",
+                              compare_products: "مقایسه مشخصات",
+                              find_sellers: "بررسی فروشندگان",
+                              get_shop_details: "اطلاعات فروشگاه",
+                              request_inquiry: "استعلام آزمایشی",
+                              find_alternatives: "گزینه‌های جایگزین",
+                            }[tool.name] || "بررسی داده‌ها"}
+                            {tool.status === "error" ? " · انجام نشد" : ""}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {m.provider === "local" ? (
+                      <small className="local-reply-label">
+                        پاسخ محلی · بدون مدل زبانی
+                      </small>
+                    ) : null}
                     {m.role === "user" ? <CheckCheck size={12} /> : null}
                   </div>
                 ))}
@@ -1438,6 +1595,23 @@ function App() {
                     </div>
                   </>
                 ) : null}
+                {chatBusy ? (
+                  <div className="chat-thinking" role="status">
+                    <LoaderCircle className="spin" size={15} /> در حال بررسی
+                    درخواست و اطلاعات…
+                  </div>
+                ) : null}
+                {failedRequest ? (
+                  <div className="chat-error" role="alert">
+                    <p>{failedRequest.error}</p>
+                    <button
+                      onClick={() => sendChat("", failedRequest.request)}
+                      disabled={chatBusy}
+                    >
+                      <RotateCcw size={13} /> تلاش دوباره برای همین پیام
+                    </button>
+                  </div>
+                ) : null}
                 <div ref={chatEnd} />
               </div>
               {selected ? (
@@ -1471,13 +1645,19 @@ function App() {
                       }
                     }}
                   />
-                  <button disabled={!chatText.trim()} aria-label="ارسال پیام">
+                  <button
+                    disabled={!chatText.trim() || chatBusy}
+                    aria-label="ارسال پیام"
+                  >
                     <ArrowUp size={20} />
                   </button>
                 </div>
                 <p>
-                  <ShieldCheck size={11} /> راهنمای محلی • بدون تماس واقعی با
-                  فروشگاه
+                  <ShieldCheck size={11} />{" "}
+                  {backendInfo?.assistant?.configured
+                    ? "مدل زبانی متصل"
+                    : "مدل زبانی تنظیم نشده"}{" "}
+                  • بدون تماس واقعی
                 </p>
               </form>
             </aside>
@@ -1652,6 +1832,26 @@ function App() {
               این پروژه بازطراحی آزمایشی تجربه ترب است و به سرویس رسمی ترب متصل
               نیست.
             </p>
+            <section className="theme-settings">
+              <h3>ظاهر سایت</h3>
+              <div>
+                {[
+                  ["light", "روشن", Sun],
+                  ["dark", "تاریک", Moon],
+                  ["system", "همگام با سیستم", Monitor],
+                ].map(([value, label, Icon]) => (
+                  <button
+                    key={value}
+                    onClick={() => setTheme(value)}
+                    aria-pressed={theme === value}
+                  >
+                    <Icon size={16} />
+                    {label}
+                    {theme === value ? <Check size={14} /> : null}
+                  </button>
+                ))}
+              </div>
+            </section>
             <div className="stats-row">
               <div>
                 <strong>{meta ? fa(meta.products) : "۲۲۵٬۹۰۳"}</strong>
@@ -1678,8 +1878,9 @@ function App() {
                 قیمت ثبت‌شده و تاریخ تغییر آن، تأیید موجودی یا قیمت امروز نیست.
               </li>
               <li>
-                دستیار فعلی با قواعد محلی، جست‌وجو و فیلترها را اجرا می‌کند؛ به
-                مدل زبانی متصل نیست.
+                {backendInfo?.assistant?.configured
+                  ? "دستیار به مدل زبانی متصل است و با ابزارهای سمت سرور، داده‌های محصولات و فروشگاه‌ها را بررسی می‌کند."
+                  : "اتصال مدل در بک‌اند پیاده شده؛ کلید API هنوز تنظیم نشده و پاسخ‌های فعلی در حالت محلی هستند."}
               </li>
               <li>
                 ساعت کاری بر اساس اطلاعات اعلام‌شده و زمان تهران است؛ تعطیلی

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": false,
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "include": [
+    "server/**/*.ts",
+    "db/**/*.ts",
+    "tests/**/*.ts",
+    "vite*.ts",
+    "drizzle.config.ts"
+  ]
+}

@@ -9,6 +9,17 @@
       name="description"
       content="ترب همراه، نمونه دستیار خرید حضوری تهران؛ مقایسه محصول، فروشگاه‌های نزدیک و برنامه‌ریزی مراجعه با دیتاست چالش ترب."
     />
+    <script>
+      try {
+        const t = localStorage.getItem("torob:theme:v1");
+        const d =
+          t === "dark" ||
+          ((!t || t === "system") &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = d ? "dark" : "light";
+        document.documentElement.style.colorScheme = d ? "dark" : "light";
+      } catch {}
+    </script>
     <title>ترب همراه | خرید خوب، همین نزدیکی</title>
   </head>
   <body>

@@ -1,3 +1,4 @@
+import {api,backendReady} from './api.js';
 export const fa = (n) => new Intl.NumberFormat("fa-IR").format(n);
 export const money = (n) => (n == null ? "قیمت نامشخص" : fa(n) + " تومان");
 export const normalize = (s) =>
@@ -89,6 +90,7 @@ export async function readCompressed(url, options) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 export async function getProduct(p) {
+  if(backendReady)return api('/products/'+encodeURIComponent(p.id));
   const key = p.id.slice(-2);
   if (!shardCache.has(key))
     shardCache.set(

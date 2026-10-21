@@ -1,0 +1,603 @@
+.theme-toggle {
+  color: #78828e;
+}
+.theme-settings {
+  border: 1px solid var(--border);
+  padding: 15px;
+  border-radius: 9px;
+  margin: 18px 0;
+}
+.theme-settings h3 {
+  font-size: 12px;
+  margin-bottom: 13px;
+}
+.theme-settings > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.theme-settings button {
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #828a94;
+}
+.theme-settings button[aria-pressed="true"] {
+  background: var(--soft-red);
+  border-color: #e5b5b1;
+  color: var(--red);
+}
+.tool-results {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+}
+.tool-results > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: #50876b;
+  background: #edf6f0;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.tool-results > .tool-error {
+  color: #ad7353;
+  background: #fff3e9;
+}
+.local-reply-label {
+  display: block;
+  font-size: 8px;
+  color: #ad9890;
+  margin: 7px 3px;
+}
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  padding: 10px;
+  color: #9a756b;
+}
+.chat-error {
+  border: 1px solid #edd0c9;
+  background: #fff6f2;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 10px;
+  color: #af7365;
+  margin-bottom: 14px;
+}
+.chat-error button {
+  font-size: 10px;
+  margin-top: 9px;
+  color: var(--red);
+  padding: 5px 0;
+}
+.chat-error p {
+  line-height: 2;
+}
+.chat-form button:disabled {
+  cursor: not-allowed;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e2e6eb;
+  --muted: #9aa5b3;
+  --red: #ff827c;
+  --deep-red: #ed6b66;
+  --border: #303944;
+  --green: #84c7a3;
+  --soft-red: #39282a;
+  --shadow: 0 5px 22px #0003;
+  background: #11161c;
+  color: var(--ink);
+}
+html[data-theme="dark"] body {
+  background: #11161c;
+  color: var(--ink);
+}
+[data-theme="dark"]
+  :is(
+    .site-header,
+    .site-footer,
+    .filters,
+    .product-card,
+    .assistant-panel,
+    .modal,
+    .detail-product,
+    .seller-card,
+    .compare-tray,
+    .chat-form,
+    .home-companion
+  ) {
+  background: #1b222b;
+  border-color: var(--border);
+  color: var(--ink);
+}
+[data-theme="dark"] .site-header {
+  box-shadow: 0 2px 12px #0002;
+}
+[data-theme="dark"]
+  :is(
+    .header-search,
+    .home-search,
+    .purchase-switch,
+    .shop-avatar,
+    .image-placeholder,
+    .spec-list > div:nth-child(odd),
+    .shop-price,
+    .compare-table th:first-child
+  ) {
+  background: #242d37;
+  border-color: #35404d;
+  color: #a6b2c1;
+}
+[data-theme="dark"] .home-page {
+  background: #141c26;
+}
+[data-theme="dark"] .home-search {
+  background: #1c2734;
+  border-color: #3a485c;
+  box-shadow: 0 4px 20px #0001;
+}
+[data-theme="dark"] .home-search input::placeholder {
+  color: #a5b3c6;
+}
+[data-theme="dark"]
+  :is(
+    .home-tagline,
+    .home-top-nav,
+    .site-footer,
+    .home-suggestions,
+    .home-bottom
+  ) {
+  color: #9aaec7;
+}
+[data-theme="dark"] .home-companion {
+  border-color: #4f3437;
+  box-shadow: 0 6px 25px #0002;
+}
+[data-theme="dark"] :is(.companion-symbol, .assistant-avatar) {
+  background: #3a292c;
+  border-color: #5a3638;
+  color: var(--red);
+}
+[data-theme="dark"] :is(.new-badge, .nav-hamrah small) {
+  background: #422c2d;
+  border-color: #69403c;
+  color: #ff9f96;
+}
+[data-theme="dark"]
+  :is(
+    .home-companion small,
+    .home-suggestions > span,
+    .breadcrumb,
+    .catalogue-heading p,
+    .card-category,
+    .eyebrow,
+    .results-footer,
+    .results-footer button
+  ) {
+  color: #9aa5b3;
+}
+[data-theme="dark"] .category-nav {
+  border-color: #252e38;
+  color: #a6b1c0;
+}
+[data-theme="dark"] :is(.category-nav > span, .header-divider) {
+  background: #35404b;
+}
+[data-theme="dark"]
+  :is(.icon-button:hover, .view-switch, .purchase-switch button.active) {
+  background: #303a47;
+}
+[data-theme="dark"] :is(.login-button, .saved-header, .theme-toggle) {
+  color: #aab6c5;
+}
+[data-theme="dark"] .inperson-banner {
+  background: #302327;
+  border-color: #523337;
+}
+[data-theme="dark"] .banner-icon {
+  background: #432d30;
+  border-color: #674044;
+}
+[data-theme="dark"] .little-spark {
+  background: #302327;
+}
+[data-theme="dark"] .banner-eyebrow span {
+  background: #483034;
+  color: #e8aaa2;
+}
+[data-theme="dark"] .inperson-banner p {
+  color: #bea09f;
+}
+[data-theme="dark"] :is(.banner-action, .outline-button) {
+  background: #30282c;
+  border-color: #885651;
+  color: #ffaaa2;
+}
+[data-theme="dark"] :is(.banner-action:hover, .outline-button:hover) {
+  background: #443033;
+}
+[data-theme="dark"] .store-art {
+  background: #523238;
+  color: #d89a91;
+}
+[data-theme="dark"] .route-point {
+  background: #3e2a2f;
+}
+[data-theme="dark"] .route-line {
+  border-color: #684345;
+}
+[data-theme="dark"] .route-check {
+  background: #253b31;
+  color: #92c7a5;
+}
+[data-theme="dark"]
+  :is(
+    .filter-heading,
+    .filter-section,
+    .assistant-journey,
+    .assistant-context,
+    .chat-form,
+    .assistant-selection,
+    .seller-bottom,
+    .card-bottom,
+    .results-footer,
+    .spec-list > div,
+    .modal > header
+  ) {
+  border-color: var(--border);
+}
+[data-theme="dark"]
+  :is(
+    .budget-input,
+    .filter-section select,
+    .location-select,
+    .chat-form > div
+  ) {
+  background: #19212a;
+  border-color: #3b4552;
+  color: var(--ink);
+}
+[data-theme="dark"] .range-label {
+  color: #8e9aaa;
+}
+[data-theme="dark"] .range-label strong {
+  color: #c4ceda;
+}
+[data-theme="dark"] .budget-presets button {
+  color: #acb7c6;
+  border-color: #3a4552;
+}
+[data-theme="dark"]
+  :is(
+    .budget-presets button.selected,
+    .budget-presets button:hover,
+    .place-grid button.active,
+    .theme-settings button[aria-pressed="true"]
+  ) {
+  background: #39292c;
+  border-color: #81514e;
+  color: #ffaaa2;
+}
+[data-theme="dark"] .toggle-row input {
+  background: #465261;
+}
+[data-theme="dark"] .toggle-row input:checked {
+  background: var(--red);
+}
+[data-theme="dark"] .data-note {
+  background: #171e26;
+  color: #97a4b4;
+}
+[data-theme="dark"] :is(.sort-bar, .view-switch, .mobile-filter) {
+  border-color: #35404c;
+  color: #acb7c6;
+}
+[data-theme="dark"] :is(.view-switch button.active, .active-filters > span) {
+  background: #3d292d;
+  border-color: #68413e;
+  color: #ff9c93;
+}
+[data-theme="dark"] .card-image {
+  background: white;
+  margin: 8px;
+  border-radius: 5px;
+}
+[data-theme="dark"] .product-title {
+  color: #dce3ed;
+}
+[data-theme="dark"] .product-title:hover {
+  color: #ff9f96;
+}
+[data-theme="dark"]
+  :is(
+    .product-price small,
+    .card-bottom > button:first-child,
+    .detail-actions button,
+    .seller-name > span,
+    .seller-address,
+    .seller-bottom > div > small,
+    .seller-toolbar small
+  ) {
+  color: #9daabb;
+}
+[data-theme="dark"] .card-bottom .compare-button {
+  border-color: #3a4551;
+  color: #a5b2c2;
+}
+[data-theme="dark"] .card-bottom .compare-button.is-selected {
+  color: var(--red);
+}
+[data-theme="dark"] :is(.assistant-context, .assistant-selection) {
+  background: #182029;
+  color: #b3a09c;
+}
+[data-theme="dark"] .assistant-header p {
+  color: #a0aab7;
+}
+[data-theme="dark"] .assistant-journey > span {
+  color: #8f9aa9;
+}
+[data-theme="dark"] .assistant-journey > div {
+  background: #39414b;
+}
+[data-theme="dark"] .assistant-journey i {
+  border-color: #46515e;
+}
+[data-theme="dark"] .assistant-journey .current {
+  color: var(--red);
+}
+[data-theme="dark"] .assistant-journey .current i {
+  color: #28191a;
+}
+[data-theme="dark"] .assistant-journey .done i {
+  background: #293b32;
+  border-color: #426a53;
+}
+[data-theme="dark"] .message.assistant > p {
+  background: #242d38;
+  border-color: #35404d;
+  color: #c0cad6;
+}
+[data-theme="dark"] .message.user {
+  background: #402c31;
+  color: #f1c1b8;
+}
+[data-theme="dark"] .message-label {
+  color: #c5a39a;
+}
+[data-theme="dark"] .assistant-intro-card {
+  border-color: #323a46;
+}
+[data-theme="dark"] :is(.assistant-intro-card strong, .alternative-box strong) {
+  color: #c6b8b0;
+}
+[data-theme="dark"] .assistant-intro-card p {
+  color: #a4acb8;
+}
+[data-theme="dark"] .intro-illustration {
+  background: #38292d;
+  color: #de9c8d;
+}
+[data-theme="dark"] .intro-illustration > span {
+  background: #26322c;
+  border-color: #425549;
+  color: #a3b69f;
+}
+[data-theme="dark"] .prompt-chips > button {
+  background: #202933;
+  border-color: #3b4654;
+  color: #b7c2d1;
+}
+[data-theme="dark"] .prompt-chips > button:hover {
+  background: #3c2a2d;
+  border-color: #79504a;
+}
+[data-theme="dark"]
+  :is(
+    .prompt-chips > span,
+    .chat-form textarea::placeholder,
+    .chat-form > p,
+    .assistant-selection small
+  ) {
+  color: #9a9ea8;
+}
+[data-theme="dark"] .chat-form button {
+  color: #2d1717;
+}
+[data-theme="dark"] .chat-form button:disabled {
+  background: #453337;
+  color: #a58d87;
+}
+[data-theme="dark"] .tool-results > span {
+  background: #20382e;
+  color: #9ac8b0;
+}
+[data-theme="dark"] .tool-results > .tool-error {
+  background: #3d3023;
+  color: #ddba8e;
+}
+[data-theme="dark"] :is(.local-reply-label, .chat-thinking) {
+  color: #c6aaa0;
+}
+[data-theme="dark"] .chat-error {
+  background: #37272a;
+  border-color: #70433e;
+  color: #e5b2a6;
+}
+[data-theme="dark"]
+  :is(.detail-image, .compare-table thead img, .compare-thumbs button) {
+  background: white;
+  border-radius: 5px;
+  padding: 6px;
+}
+[data-theme="dark"] :is(.nearest-badge, .seller-tags > span.open) {
+  background: #243b2c;
+  color: #9dc6a6;
+}
+[data-theme="dark"] .seller-tags > span {
+  background: #293440;
+  color: #aab9ca;
+}
+[data-theme="dark"] .seller-tags > span.closed {
+  background: #3f2f29;
+  color: #ddad99;
+}
+[data-theme="dark"] .seller-tags > span.payment-tag {
+  background: #342b42;
+  color: #c5b1da;
+}
+[data-theme="dark"] .seller-tags .unknown-stock {
+  background: #1b222b;
+  border-color: #3b4654;
+}
+[data-theme="dark"]
+  :is(.seller-warning, .simulation-result, .inquiry-demo, .map-error) {
+  background: #393123;
+  border-color: #635332;
+  color: #d6bc8b;
+}
+[data-theme="dark"] .seller-card.unavailable {
+  background: #20252c;
+}
+[data-theme="dark"] .seller-route {
+  border-color: #43505d;
+  color: #acbbcc;
+}
+[data-theme="dark"] .alternative-box {
+  background: #292426;
+  border-color: #5a4541;
+}
+[data-theme="dark"] .alternative-box p {
+  color: #b3a3a0;
+}
+[data-theme="dark"] .alternative-box button {
+  color: #e0ac99;
+}
+[data-theme="dark"] .modal-backdrop {
+  background: #03070cb0;
+}
+[data-theme="dark"] :is(.empty-state, .geolocate, .category-grid > button) {
+  background: #1b222b;
+  border-color: #45515d;
+  color: #a7b4c5;
+}
+[data-theme="dark"] .empty-state h3 {
+  color: #d1d9e4;
+}
+[data-theme="dark"] :is(.empty-state button, .geolocate) {
+  background: #36282b;
+  border-color: #77514b;
+  color: #f4aaa0;
+}
+[data-theme="dark"] .place-grid button {
+  border-color: #3c4856;
+  color: #b3bfce;
+}
+[data-theme="dark"] .category-grid > button:hover {
+  background: #35282a;
+  border-color: #82534b;
+}
+[data-theme="dark"]
+  :is(
+    .about-body > p,
+    .about-body ul,
+    .shop-modal > p,
+    .hours-details,
+    .spec-list dt,
+    .compare-table th:first-child,
+    .compare-table td
+  ) {
+  color: #aebaca;
+}
+[data-theme="dark"]
+  :is(
+    .stats-row > div + div,
+    .hours-details li,
+    .compare-table th,
+    .compare-table td
+  ) {
+  border-color: #35414e;
+}
+[data-theme="dark"] .shop-price strong {
+  color: #e5eaf1;
+}
+[data-theme="dark"] .payment-details {
+  background: #2a2434;
+  border-color: #4c3c5f;
+  color: #c9b1dd;
+}
+[data-theme="dark"] .demo-label {
+  background: #5b4b29;
+  color: #ebcd94;
+}
+[data-theme="dark"] .inquiry-demo > p {
+  color: #d6c29e;
+}
+[data-theme="dark"] .inquiry-demo button {
+  background: #29251e;
+  border-color: #78613c;
+  color: #e0bd80;
+}
+[data-theme="dark"] .compare-table tbody tr:nth-child(even) {
+  background: #202934;
+}
+[data-theme="dark"] .compare-table thead span {
+  color: #d2dce8;
+}
+[data-theme="dark"] :is(.primary, .assistant-fab) {
+  color: #291718;
+}
+[data-theme="dark"] .map-legend {
+  background: #202a35;
+  color: #c4cfdd;
+}
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: brightness(0.8) saturate(0.65);
+}
+[data-theme="dark"] .leaflet-control-attribution {
+  background: #202a35d9;
+  color: #a7b3c3;
+}
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 5px;
+}
+@media (max-width: 640px) {
+  .header-actions {
+    display: flex !important;
+  }
+  .header-actions .theme-toggle {
+    display: flex;
+    width: 26px;
+    height: 30px;
+  }
+  .header-actions .theme-toggle svg {
+    width: 18px;
+  }
+  .theme-settings button {
+    font-size: 10px;
+    padding: 8px;
+  }
+  .tool-results > span {
+    font-size: 8px;
+  }
+  .home-header .header-actions .theme-toggle {
+    display: flex;
+  }
+  .home-header .header-actions .login-button {
+    display: none;
+  }
+}
+@media (max-width: 370px) {
+  .header-actions .saved-header {
+    display: none;
+  }
+}
