@@ -1,4 +1,4 @@
-import {api,backendReady} from './api.js';
+import { api, backendReady } from "./api.js";
 export const fa = (n) => new Intl.NumberFormat("fa-IR").format(n);
 export const money = (n) => (n == null ? "قیمت نامشخص" : fa(n) + " تومان");
 export const normalize = (s) =>
@@ -19,7 +19,20 @@ export const places = {
   جمهوری: [35.695, 51.407],
   ولیعصر: [35.714, 51.407],
   تهرانپارس: [35.734, 51.525],
+  نارمک: [35.738, 51.49],
+  منیریه: [35.678, 51.399],
 };
+export const hasInPersonCredit = (shop) =>
+  shop.payment_options?.some((p) =>
+    ["in_person", "offline", "inperson", "physical"].includes(p.channel),
+  ) || false;
+export function inferCategory(query) {
+  const q = normalize(query);
+  if (/قاب|کاور|گلس|باتری|شارژر|کابل|سوکت|تاچ|ال سی دی|قطعه|محافظ|درب/.test(q))
+    return "";
+  if (/گوشی|موبایل|(?:سامسونگ|galaxy)\s*a\d{2}/.test(q)) return "گوشی موبایل";
+  return "";
+}
 export function distance(a, b) {
   if (!a || !b) return null;
   const rad = (n) => (n * Math.PI) / 180;
@@ -90,7 +103,7 @@ export async function readCompressed(url, options) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 export async function getProduct(p) {
-  if(backendReady)return api('/products/'+encodeURIComponent(p.id));
+  if (backendReady) return api("/products/" + encodeURIComponent(p.id));
   const key = p.id.slice(-2);
   if (!shardCache.has(key))
     shardCache.set(

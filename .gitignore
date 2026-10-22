@@ -3,8 +3,7 @@ dist/
 .openai/*.tar.gz
 .playwright-mcp/
 *.log
-.env
-.env.*
+.env*
 !.env.example
 .dev.vars*
 .wrangler/

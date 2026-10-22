@@ -6,6 +6,10 @@ import React, {
   useDeferredValue,
 } from "react";
 import { createRoot } from "react-dom/client";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import AssistantCards from "./AssistantCards";
+import shopLinks from "./shop-links.json";
 import {
   Search,
   MapPin,
@@ -62,11 +66,14 @@ import {
   parseRequest,
   normalize,
   readCompressed,
+  hasInPersonCredit,
+  inferCategory,
 } from "./catalogue";
 import "./style.css";
 import { api, setBackendReady, threadId, newThread } from "./api";
 import { useTheme } from "./theme";
 import "./dark.css";
+import "./assistant-cards.css";
 
 const categories = [
   { name: "گوشی موبایل", icon: Smartphone },
@@ -307,6 +314,8 @@ function App() {
           setInstallment(c.installment);
           setOnlyOpen(c.onlyOpen);
           setSort(c.sort);
+          setCategory(c.category || "");
+          setCustomPosition(c.position || null);
         }
       })
       .catch(() => {});
@@ -323,6 +332,8 @@ function App() {
     new URLSearchParams(location.search).get("q") || "گوشی موبایل",
   );
   const [searchText, setSearchText] = useState("");
+  const [category, setCategory] = useState("");
+  const [busyInquiry, setBusyInquiry] = useState(null);
   const [featured, setFeatured] = useState([]),
     [products, setProducts] = useState([]),
     [total, setTotal] = useState(0),
@@ -418,6 +429,7 @@ function App() {
         brand,
         sort,
         limit: "60",
+        category,
       });
       if (Number(budget) > 0) params.set("budget", budget);
       api("/products?" + params, { signal: controller.signal })
@@ -459,8 +471,9 @@ function App() {
       budget: Number(budget) || null,
       brand,
       sort,
+      category,
     });
-  }, [page, deferredQuery, budget, brand, sort, backendInfo]);
+  }, [page, deferredQuery, budget, brand, sort, category, backendInfo]);
   useEffect(() => () => worker.current?.terminate(), []);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -513,6 +526,7 @@ function App() {
   function goSearch(text) {
     const q = (text || searchText || "گوشی موبایل").trim();
     setQuery(q);
+    setCategory(inferCategory(q));
     setSearchText(q);
     setPage("results");
     setShowSaved(false);
@@ -576,6 +590,22 @@ function App() {
       { timeout: 10000 },
     );
   }
+  function pageContext() {
+    return {
+      query,
+      category,
+      position: customPosition,
+      budget: Number(budget) > 0 ? Number(budget) : null,
+      brand,
+      place,
+      radius: Number(radius),
+      installment,
+      onlyOpen,
+      sort,
+      selectedId: selected?.id || null,
+      compareIds: compare.map((p) => p.id),
+    };
+  }
   async function sendChat(text, retryRequest) {
     const input = (text || chatText).trim();
     if ((!input && !retryRequest) || chatBusy) return;
@@ -585,6 +615,8 @@ function App() {
       message: input,
       context: {
         query,
+        category,
+        position: customPosition,
         budget: Number(budget) > 0 ? Number(budget) : null,
         brand,
         place,
@@ -618,11 +650,13 @@ function App() {
           if (f.budget !== undefined)
             setBudget(f.budget == null ? "" : String(f.budget));
           if (f.brand !== undefined) setBrand(f.brand);
+          if (f.category !== undefined) setCategory(f.category);
           if (f.place && places[f.place]) {
             setPlace(f.place);
             setCustomPosition(null);
           }
           if (f.radius !== undefined) setRadius(f.radius);
+          if (f.position !== undefined) setCustomPosition(f.position);
           if (f.installment !== undefined) setInstallment(f.installment);
           if (f.onlyOpen !== undefined) setOnlyOpen(f.onlyOpen);
           if (f.sort) setSort(f.sort);
@@ -641,6 +675,7 @@ function App() {
           text: reply.text,
           provider: reply.provider,
           tools: reply.tools,
+          actions: reply.actions,
         },
       ]);
     } catch (e) {
@@ -675,11 +710,12 @@ function App() {
     () =>
       offerRows.filter(
         (o) =>
-          (!installment || o.shop.payment_options?.length > 0) &&
+          (!installment || hasInPersonCredit(o.shop)) &&
+          (!budget || (o.price != null && o.price <= Number(budget))) &&
           (!onlyOpen || hoursStatus(o.shop).state === "open") &&
           (o.distance === null || o.distance <= Number(radius)),
       ),
-    [offerRows, installment, onlyOpen, radius],
+    [offerRows, installment, onlyOpen, radius, budget],
   );
   const displayProducts = showSaved
     ? saved
@@ -692,48 +728,68 @@ function App() {
   const activeFilters = [
     budget && `تا ${money(Number(budget))}`,
     brand,
-    installment && "دارای اطلاعات خرید اعتباری",
+    installment && "اقساط حضوری اعلام‌شده",
     onlyOpen && "طبق برنامه باز",
     radius < 30 && `تا ${fa(radius)} کیلومتر`,
   ].filter(Boolean);
-  function simulate(o, status) {
-    if (backendInfo?.catalogueReady && selected) {
-      const id = crypto.randomUUID();
-      api("/inquiries", {
+  async function runSimulation(inquiry, status) {
+    if (busyInquiry || chatBusy) return;
+    setBusyInquiry(inquiry.id);
+    try {
+      const result = await api("/inquiries/" + inquiry.id + "/simulate", {
+        method: "POST",
+        body: JSON.stringify({ status, context: pageContext() }),
+      });
+      setSimulations((old) => ({
+        ...old,
+        [inquiry.offerId]: status.replace("_demo", ""),
+      }));
+      setMessages((old) => [
+        ...old,
+        { role: "assistant", text: result.message, actions: result.actions },
+      ]);
+      setAssistantOpen(true);
+      setShopFocus(null);
+      setModal(null);
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setBusyInquiry(null);
+    }
+  }
+  async function simulate(o, status) {
+    if (!selected || busyInquiry || chatBusy) return;
+    setBusyInquiry(o.id);
+    try {
+      const inquiry = await api("/inquiries", {
         method: "POST",
         body: JSON.stringify({
           threadId: conversation.current,
-          requestId: id,
+          requestId: crypto.randomUUID(),
           productId: selected.id,
           offerId: o.id,
         }),
-      })
-        .then(() =>
-          api("/inquiries/" + id + "/simulate", {
-            method: "POST",
-            body: JSON.stringify({
-              status:
-                status === "available"
-                  ? "available_demo"
-                  : status === "unavailable"
-                    ? "unavailable_demo"
-                    : "noanswer_demo",
-            }),
-          }),
-        )
-        .catch(() =>
-          notify("سناریو فقط در همین صفحه ثبت شد؛ ذخیره سمت سرور انجام نشد."),
-        );
-    }
-    setSimulations((old) => ({ ...old, [o.id]: status }));
-    if (status === "unavailable")
+      });
+      const result = await api("/inquiries/" + inquiry.id + "/simulate", {
+        method: "POST",
+        body: JSON.stringify({
+          status: status + "_demo",
+          context: pageContext(),
+        }),
+      });
+      setSimulations((old) => ({ ...old, [o.id]: status }));
       setMessages((old) => [
         ...old,
-        {
-          role: "assistant",
-          text: `در سناریوی آزمایشی، فروشگاه «${o.shop.name}» موجودی ندارد. ${offerRows.filter((x) => x.id !== o.id).length ? `از ${fa(offerRows.filter((x) => x.id !== o.id).length)} آفر دیگر همین محصول می‌توانی جایگزین انتخاب کنی؛ موجودی آن‌ها هنوز تأیید نشده.` : "آفر دیگری در دیتاست این محصول نداریم؛ محصولات مشابه را در نتایج بررسی کن."}`,
-        },
+        { role: "assistant", text: result.message, actions: result.actions },
       ]);
+      setAssistantOpen(true);
+      setShopFocus(null);
+      setModal(null);
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setBusyInquiry(null);
+    }
   }
 
   return (
@@ -1085,8 +1141,8 @@ function App() {
                   />
                 </label>
                 <p className="tiny muted">
-                  فقط فروشندگان دارای اطلاعات سرویس؛ پذیرندگی حضوری را استعلام
-                  کنید.
+                  فقط سرویس با کانال حضوری اعلام‌شده؛ کانال آنلاین یا نامشخص حذف
+                  می‌شود. شرایط نهایی نیازمند استعلام است.
                 </p>
                 <label className="toggle-row">
                   <span>
@@ -1526,7 +1582,36 @@ function App() {
                         <Sparkles size={12} /> ترب همراه
                       </span>
                     ) : null}
-                    <p>{m.text}</p>
+                    {m.role === "assistant" ? (
+                      <div className="message-markdown">
+                        <Markdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ node, ...props }) => (
+                              <a {...props} target="_blank" rel="noreferrer" />
+                            ),
+                          }}
+                        >
+                          {m.text}
+                        </Markdown>
+                      </div>
+                    ) : (
+                      <p>{m.text}</p>
+                    )}
+                    <AssistantCards
+                      actions={m.actions}
+                      busyInquiry={busyInquiry || chatBusy}
+                      onSimulate={runSimulation}
+                      onProduct={(p) => {
+                        setSelected(p);
+                        setPage("results");
+                        setView("products");
+                      }}
+                      onSeller={(o) => {
+                        setShopFocus(o);
+                        setModal("shop");
+                      }}
+                    />
                     {m.tools?.length ? (
                       <div className="tool-results">
                         {m.tools.map((tool, i) => (
@@ -1544,6 +1629,7 @@ function App() {
                               get_shop_details: "اطلاعات فروشگاه",
                               request_inquiry: "استعلام آزمایشی",
                               find_alternatives: "گزینه‌های جایگزین",
+                              suggest_market_areas: "بررسی ناحیه خرید و نقشه",
                             }[tool.name] || "بررسی داده‌ها"}
                             {tool.status === "error" ? " · انجام نشد" : ""}
                           </span>
@@ -1970,7 +2056,15 @@ function App() {
               {shopFocus.warranty
                 ? typeof shopFocus.warranty === "string"
                   ? shopFocus.warranty
-                  : JSON.stringify(shopFocus.warranty)
+                  : [
+                      shopFocus.warranty.provider,
+                      shopFocus.warranty.period_months
+                        ? fa(shopFocus.warranty.period_months) + " ماهه"
+                        : null,
+                      shopFocus.warranty.description,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "جزئیات ثبت نشده"
                 : "ثبت نشده"}
             </p>
             {shopFocus.shop.payment_options?.length ? (
@@ -2038,6 +2132,32 @@ function App() {
                 <p>ساعت کاری ثبت نشده است.</p>
               )}
             </details>
+            {shopLinks[shopFocus.shop.shop_id] ? (
+              <div className="public-shop-links">
+                <small>
+                  لینک ثبت‌شده فروشنده در دیتاست؛ قیمت و موجودی امروز از این
+                  طریق تأیید نشده است.
+                </small>
+                {shopLinks[shopFocus.shop.shop_id].website_url ? (
+                  <a
+                    href={shopLinks[shopFocus.shop.shop_id].website_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    وبسایت ثبت‌شده فروشگاه ↗
+                  </a>
+                ) : null}
+                {shopLinks[shopFocus.shop.shop_id].instagram ? (
+                  <a
+                    href={shopLinks[shopFocus.shop.shop_id].instagram}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    اینستاگرام ثبت‌شده فروشگاه ↗
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             <a
               className="primary route-button"
               href={`https://www.google.com/maps/dir/?api=1&destination=${shopFocus.shop.lat},${shopFocus.shop.lon}`}
@@ -2055,33 +2175,20 @@ function App() {
               </p>
               <div>
                 <button
-                  onClick={() => {
-                    simulate(shopFocus, "available");
-                    notify("پاسخ فرضی ذخیره شد؛ این تأیید واقعی موجودی نیست.");
-                  }}
+                  disabled={!!busyInquiry || chatBusy}
+                  onClick={() => simulate(shopFocus, "available")}
                 >
                   سناریو: موجود است
                 </button>
                 <button
-                  onClick={() => {
-                    simulate(shopFocus, "unavailable");
-                    setAssistantOpen(true);
-                    setShopFocus(null);
-                    setModal(null);
-                    notify(
-                      "سناریوی عدم موجودی ثبت شد؛ آفرهای دیگر همین محصول را بررسی کنید.",
-                    );
-                  }}
+                  disabled={!!busyInquiry || chatBusy}
+                  onClick={() => simulate(shopFocus, "unavailable")}
                 >
                   سناریو: ناموجود
                 </button>
                 <button
-                  onClick={() => {
-                    simulate(shopFocus, "noanswer");
-                    notify(
-                      "سناریوی عدم پاسخ ثبت شد؛ آفرهای دیگر را بررسی کنید.",
-                    );
-                  }}
+                  disabled={!!busyInquiry || chatBusy}
+                  onClick={() => simulate(shopFocus, "noanswer")}
                 >
                   سناریو: عدم پاسخ
                 </button>

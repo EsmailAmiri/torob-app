@@ -16,6 +16,9 @@ export type Product = {
   offers?: any[];
 };
 export type SearchContext = {
+  category?: string;
+  position?: [number, number] | null;
+  excludedShopIds?: string[];
   query: string;
   budget: number | null;
   brand: string;
@@ -28,6 +31,10 @@ export type SearchContext = {
   compareIds: string[];
 };
 export type Action =
+  | { type: "results"; products: Product[] }
+  | { type: "sellers"; offers: any[] }
+  | { type: "markets"; areas: any[]; catalogue: Product[] }
+  | { type: "inquiry"; inquiry: any }
   | { type: "search"; filters: Partial<SearchContext> }
   | { type: "select"; product: Product }
   | { type: "compare"; products: Product[] };

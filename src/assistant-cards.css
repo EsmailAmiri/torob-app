@@ -1,0 +1,145 @@
+.message-markdown {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  line-height: 1.9;
+}
+.message-markdown p {
+  margin: 0 0 9px;
+  white-space: normal;
+}
+.message-markdown ul,
+.message-markdown ol {
+  padding-inline-start: 22px;
+}
+.message-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.message-markdown th,
+.message-markdown td {
+  padding: 7px;
+  border: 1px solid var(--border, #ddd);
+}
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3 {
+  font-size: 14px;
+  margin: 12px 0 7px;
+}
+.assistant-cards {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.assistant-cards:empty {
+  display: none;
+}
+.assistant-product,
+.area-card,
+.inquiry-card,
+.catalogue-reminder {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid #d9dfe6;
+  border-radius: 12px;
+  background: #fff;
+  color: #26303b;
+  text-align: right;
+  min-width: 0;
+  width: 100%;
+}
+.assistant-product strong {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.assistant-product span {
+  color: #c7243b;
+  font-weight: 700;
+}
+.assistant-cards small {
+  line-height: 1.8;
+  font-size: 10px;
+  color: #626d7a;
+}
+.assistant-product:hover {
+  border-color: #d73948;
+}
+.area-card h3,
+.inquiry-card h3 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.area-card p,
+.inquiry-card p {
+  font-size: 11px;
+  line-height: 1.9;
+  margin: 0;
+}
+.area-map {
+  height: 200px;
+  min-width: 0;
+  width: 100%;
+  border-radius: 8px;
+  z-index: 0;
+}
+.area-card a {
+  font-size: 11px;
+  line-height: 1.9;
+}
+.area-card .primary {
+  text-align: center;
+  padding: 8px;
+  border-radius: 8px;
+  color: white;
+  background: #cf3046;
+}
+.simulation-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.simulation-options button {
+  padding: 7px 8px;
+  border: 1px solid #cfd5dc;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-size: 10px;
+}
+.simulation-options button:disabled {
+  opacity: 0.45;
+}
+.catalogue-reminder button {
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: right;
+  padding: 7px 0;
+  font-size: 11px;
+}
+.public-shop-links {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: 12px;
+}
+[data-theme="dark"] .assistant-product,
+[data-theme="dark"] .area-card,
+[data-theme="dark"] .inquiry-card,
+[data-theme="dark"] .catalogue-reminder {
+  background: #202a35;
+  color: #eef1f5;
+  border-color: #46515e;
+}
+[data-theme="dark"] .assistant-cards small {
+  color: #b4bfcc;
+}
+[data-theme="dark"] .assistant-product span {
+  color: #ff8798;
+}

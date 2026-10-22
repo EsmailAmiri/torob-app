@@ -2,7 +2,11 @@ import OpenAI from "openai";
 import { toolDefinitions } from "./tools";
 import type { Runtime } from "./types";
 export type Model = {
-  respond(input: any[], instructions: string): Promise<any[]>;
+  respond(
+    input: any[],
+    instructions: string,
+    options?: { final?: boolean },
+  ): Promise<any[]>;
 };
 export function modelConfig(env: Runtime) {
   const provider =
@@ -86,7 +90,7 @@ export function createModel(env: Runtime, fetchImpl?: typeof fetch): Model {
     fetch: fetchImpl as any,
   });
   return {
-    async respond(input, instructions) {
+    async respond(input, instructions, options) {
       if (config.style === "chat_completions") {
         const response = await client.chat.completions.create({
           model: config.model,
@@ -98,6 +102,7 @@ export function createModel(env: Runtime, fetchImpl?: typeof fetch): Model {
             }),
           ),
           max_tokens: 1600,
+          tool_choice: options?.final ? "none" : "auto",
           stream: false,
         });
         const message = response.choices[0]?.message as any;
@@ -133,6 +138,7 @@ export function createModel(env: Runtime, fetchImpl?: typeof fetch): Model {
         include: ["reasoning.encrypted_content"],
         max_output_tokens: 1600,
         parallel_tool_calls: false,
+        tool_choice: options?.final ? "none" : "auto",
       });
       return response.output;
     },

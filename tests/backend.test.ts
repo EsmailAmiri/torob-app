@@ -9,6 +9,7 @@ import { runAgent } from "../server/agent";
 import { contextSchema, executeTool } from "../server/tools";
 import { handleApi } from "../server/api";
 import type { Product } from "../server/types";
+import { groundPrices } from "../server/grounding";
 test("Local nearby request keeps the selected product and changes seller location", async () => {
   const { db, repo } = await fixture();
   try {
@@ -145,6 +146,234 @@ async function fixture() {
   });
   return { db, sql, repo };
 }
+test("Exact phone category excludes accessory matches and alternatives keep the category and radius", async () => {
+  const { db, repo } = await fixture();
+  try {
+    const accessory = {
+      ...(await repo.product(id("product", 1))),
+      id: id("product", 9),
+      title: "باتری گوشی سامسونگ A56",
+      category: "باتری گوشی موبایل",
+      price: 1000,
+    };
+    await repo.importProducts("01", { [accessory.id]: accessory });
+    const search = await repo.search({
+      query: "گوشی سامسونگ A56",
+      budget: 15000000,
+    });
+    assert.equal(search.total, 1);
+    assert.equal(search.products[0].category, "گوشی موبایل");
+    const alternatives = await repo.alternatives(
+      id("product", 1),
+      25000000,
+      id("shop", 1),
+      { place: "جمهوری", radius: 1 },
+    );
+    assert.equal(alternatives.sameProductSellers.length, 0);
+    assert.ok(alternatives.products.every((p) => p.category === "گوشی موبایل"));
+  } finally {
+    db.close();
+  }
+});
+test("Strict credit accepts declared in-person only, and uses the actual user position", async () => {
+  const { db, repo } = await fixture();
+  try {
+    const shop = await repo.shop(id("shop", 1));
+    for (const channel of ["unknown", "online", "in_person"]) {
+      await repo.importShops({
+        [shop.shop_id]: {
+          ...shop,
+          payment_options: [{ provider_name: "ترب‌پی", channel }],
+        },
+      });
+      const sellers = await repo.sellers({
+        productId: id("product", 1),
+        installment: true,
+        position: [35.695, 51.407],
+        radius: 1,
+      });
+      assert.equal(sellers.total, channel === "in_person" ? 1 : 0);
+      if (sellers.total) {
+        assert.equal(sellers.offers[0].paymentChannelDeclared, true);
+        assert.equal(sellers.offers[0].paymentChannelVerified, false);
+      }
+    }
+  } finally {
+    db.close();
+  }
+});
+test("Step limit finalises even when the provider ignores tool_choice and the next turn remains usable", async () => {
+  const { db, repo } = await fixture();
+  const threadId = randomUUID();
+  let calls = 0;
+  const model = {
+    async respond() {
+      calls++;
+      return [
+        {
+          type: "function_call",
+          call_id: "repeat_" + calls,
+          name: "search_products",
+          arguments: '{"query":"گوشی"}',
+        },
+      ];
+    },
+  };
+  try {
+    const reply = await runAgent({
+      repo,
+      env: {},
+      owner: "a",
+      threadId,
+      requestId: randomUUID(),
+      context: contextSchema.parse({}),
+      message: "گوشی",
+      model,
+    });
+    assert.equal(calls, 4);
+    assert.equal(reply.tools.length, 3);
+    assert.match(reply.text, /قیمت|تومان/);
+    assert.equal((await repo.loadSession("a", threadId)).pending, undefined);
+    const next = await runAgent({
+      repo,
+      env: {},
+      owner: "a",
+      threadId,
+      requestId: randomUUID(),
+      context: contextSchema.parse({}),
+      message: "سلام",
+      model: {
+        async respond() {
+          return [
+            {
+              type: "message",
+              content: [{ type: "output_text", text: "سلام" }],
+            },
+          ];
+        },
+      },
+    });
+    assert.equal(next.text, "سلام");
+  } finally {
+    db.close();
+  }
+});
+test("Price grounding repairs factor-ten errors in Persian text and Markdown cells and removes invented monetary values", () => {
+  const input = [
+    {
+      type: "function_call_output",
+      output: JSON.stringify({
+        products: [{ price: 116800000, maxPrice: 156000000 }],
+      }),
+    },
+  ];
+  assert.equal(groundPrices("۱۱٬۶۸۰٬۰۰۰ تومان", input), "۱۱۶٬۸۰۰٬۰۰۰ تومان");
+  assert.equal(groundPrices("| 11,680,000 |", input), "| ۱۱۶٬۸۰۰٬۰۰۰ |");
+  assert.equal(groundPrices("۱۱٫۶۸ میلیون تومان", input), "۱۱۶٬۸۰۰٬۰۰۰ تومان");
+  assert.equal(
+    groundPrices("۱۱۶ میلیون و ۸۰۰ هزار تومان", input),
+    "۱۱۶ میلیون و ۸۰۰ هزار تومان",
+  );
+  assert.equal(
+    groundPrices("قیمت ۹۹ میلیون تومان", input),
+    "قیمت قیمت ثبت‌شده در کارت نتیجه",
+  );
+  assert.equal(
+    groundPrices("بودجه ۶۰ میلیون تومان", input, 60000000),
+    "بودجه ۶۰ میلیون تومان",
+  );
+});
+test("Market fallback rechecks matching catalogue products and returns sourced approximate map areas", async () => {
+  const { db, repo } = await fixture();
+  const ctx = {
+    owner: "a",
+    thread: randomUUID(),
+    callId: "market",
+    context: contextSchema.parse({}),
+  };
+  try {
+    const known = await executeTool(
+      "suggest_market_areas",
+      { query: "سامسونگ A56" },
+      repo,
+      ctx,
+    );
+    assert.equal(known.result.catalogue.total, 2);
+    const missing = await executeTool(
+      "suggest_market_areas",
+      { query: "دوربین Bolex H16" },
+      repo,
+      ctx,
+    );
+    assert.equal(missing.result.catalogue.total, 0);
+    assert.equal(missing.actions[0].type, "markets");
+    assert.equal(missing.result.areas[0].provenance, "external");
+    assert.equal(missing.result.areas[0].position.length, 2);
+  } finally {
+    db.close();
+  }
+});
+test("Mock no-answer returns actionable alternatives, excludes failed shop, persists history and keeps inventory unverified", async () => {
+  const { db, repo } = await fixture();
+  const thread = randomUUID();
+  try {
+    await repo.lock("a", thread);
+    await repo.saveSession("a", thread, {
+      history: [],
+      context: contextSchema.parse({ place: "جمهوری", radius: 30 }),
+    });
+    await repo.unlock("a", thread);
+    const inquiry = await repo.inquiry(
+      "a",
+      thread,
+      id("product", 1),
+      id("offer", 1),
+      "provider-tool-call",
+    );
+    assert.match(inquiry.id, /^[a-f0-9-]{36}$/);
+    const response = await repo.simulate("a", inquiry.id, "noanswer_demo");
+    assert.equal(response.inventory, "unverified");
+    const sellers = response.actions.find((a) => a.type === "sellers");
+    assert.equal(sellers.offers.length, 1);
+    assert.equal(sellers.offers[0].shop.shop_id, id("shop", 2));
+    const state = await repo.loadSession("a", thread);
+    assert.equal(state.history.length, 1);
+    assert.deepEqual(state.context?.excludedShopIds, [id("shop", 1)]);
+    await repo.simulate("a", inquiry.id, "noanswer_demo");
+    assert.equal((await repo.loadSession("a", thread)).history.length, 1);
+  } finally {
+    db.close();
+  }
+});
+test("Inquiry simulation uses the current page budget and radius rather than stale chat filters", async () => {
+  const { db, repo } = await fixture();
+  try {
+    const inquiry = await repo.inquiry(
+      "a",
+      randomUUID(),
+      id("product", 1),
+      id("offer", 1),
+      "simulation-context",
+    );
+    const result = await repo.simulate(
+      "a",
+      inquiry.id,
+      "unavailable_demo",
+      contextSchema.parse({ budget: 15000000, place: "جمهوری", radius: 1 }),
+    );
+    assert.equal(
+      result.actions.find((a) => a.type === "sellers").offers.length,
+      0,
+    );
+    assert.ok(
+      result.actions
+        .find((a) => a.type === "results")
+        .products.every((p: any) => p.price <= 15000000),
+    );
+  } finally {
+    db.close();
+  }
+});
 test("SQLite FTS searches normalized Persian; budget excludes unknown prices", async () => {
   const { db, repo } = await fixture();
   try {
@@ -178,10 +407,14 @@ test("Sellers come from exact offers and unknown credit channel is not verified"
       radius: 1,
       installment: true,
     });
-    assert.equal(result.total, 1);
-    assert.equal(result.offers[0].shop.address, "جمهوری، طبقه دوم");
-    assert.equal(result.offers[0].inventory, "unverified");
-    assert.equal(result.offers[0].paymentChannelVerified, false);
+    assert.equal(result.total, 0);
+    const unfiltered = await repo.sellers({
+      productId: id("product", 1),
+      place: "جمهوری",
+      radius: 1,
+    });
+    assert.equal(unfiltered.offers[0].inventory, "unverified");
+    assert.equal(unfiltered.offers[0].paymentChannelVerified, false);
   } finally {
     db.close();
   }
@@ -264,7 +497,7 @@ test("LangGraph runs model → validated tool → model and persists complete to
     db.close();
   }
 });
-test("Pending tool stage resumes after a model failure without rerunning successful tools", async () => {
+test("A model summary failure returns usable grounded results without trapping the thread", async () => {
   const { db, repo } = await fixture();
   const threadId = randomUUID(),
     requestId = randomUUID();
@@ -295,9 +528,10 @@ test("Pending tool stage resumes after a model failure without rerunning success
     model,
   };
   try {
-    await assert.rejects(runAgent(options));
+    const first = await runAgent(options);
+    assert.match(first.text, /گوشی/);
     const stored = await repo.loadSession("a", threadId);
-    assert.equal(stored.pending?.tools.length, 1);
+    assert.equal(stored.pending, undefined);
     const reply = await runAgent({
       ...options,
       model: {
@@ -360,7 +594,7 @@ test("Inquiry creation and simulation never claim real contact or stock", async 
     await assert.rejects(repo.simulate("b", "call_inquiry", "available_demo"));
     const simulated = await repo.simulate(
       "a",
-      "call_inquiry",
+      result.result.id,
       "available_demo",
     );
     assert.equal(simulated.inventory, "unverified");

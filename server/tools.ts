@@ -1,10 +1,23 @@
 import { z } from "zod";
-import { places } from "../src/catalogue.js";
+import { places, money, inferCategory } from "../src/catalogue.js";
+import { areasFor } from "./markets";
 import { Repository, productId, shopId, searchSchema } from "./repository";
 import type { Action, SearchContext } from "./types";
 const place = z.enum(Object.keys(places) as [string, ...string[]]);
+const positionInput = z
+  .object({
+    lat: z.number().min(35.4).max(35.95),
+    lon: z.number().min(51).max(51.8),
+  })
+  .nullable();
 export const contextSchema = z.object({
   query: z.string().max(160).default("گوشی موبایل"),
+  category: z.string().max(160).default(""),
+  position: z
+    .tuple([z.number().min(35.4).max(35.95), z.number().min(51).max(51.8)])
+    .nullable()
+    .default(null),
+  excludedShopIds: z.array(shopId).max(30).default([]),
   budget: z.number().positive().max(1e13).nullable().default(null),
   brand: z.string().max(80).default(""),
   place: place.default("مرکز تهران"),
@@ -17,6 +30,7 @@ export const contextSchema = z.object({
 });
 const schemas = {
   search_products: searchSchema.omit({ offset: true, limit: true }).extend({
+    position: positionInput.optional(),
     place: place.optional(),
     radius: z.number().min(1).max(30).optional(),
     installment: z.boolean().optional(),
@@ -24,6 +38,7 @@ const schemas = {
   }),
   compare_products: z.object({ productIds: z.array(productId).min(2).max(3) }),
   find_sellers: z.object({
+    position: positionInput.optional(),
     productId,
     place: place.optional(),
     radius: z.number().min(1).max(30).optional(),
@@ -41,6 +56,7 @@ const schemas = {
     budget: z.number().positive().max(1e13).nullable().optional(),
     excludeShopId: shopId.optional(),
   }),
+  suggest_market_areas: z.object({ query: z.string().min(1).max(160) }),
 };
 const descriptions = {
   search_products:
@@ -55,10 +71,17 @@ const descriptions = {
     "Create a clearly labelled SIMULATION inquiry only. Does NOT contact anyone and does NOT confirm inventory. Use an actual offer ID from find_sellers.",
   find_alternatives:
     "Find other offers for the same product and other models in the same category. Never treats category membership as confirmed stock.",
+  suggest_market_areas:
+    "After searching the catalogue, suggest sourced Tehran shopping areas for a missing item, with map widgets. Always rechecks the dataset without budget before showing external suggestions. Pass the actual requested model/category, not a generic word.",
 };
 const summary = (p: any) => {
   const { offers, specs, ...rest } = p;
-  return rest;
+  return {
+    ...rest,
+    priceLabel: money(p.price),
+    maxPriceLabel: money(p.maxPrice),
+    currency: "تومان",
+  };
 };
 export const toolDefinitions = Object.entries(schemas).map(
   ([name, schema]) => ({
@@ -83,14 +106,20 @@ export async function executeTool(
   const schema = schemas[name as keyof typeof schemas];
   if (!schema) throw Error("ابزار ناشناخته است.");
   const a: any = schema.parse(args);
+  if (a.position) a.position = [a.position.lat, a.position.lon];
   const actions: Action[] = [];
   let result: any;
   let context = { ...ctx.context };
   if (name === "search_products") {
     const filters = { ...a };
+    if (a.query !== undefined && a.category === undefined)
+      filters.category = inferCategory(a.query);
     context = { ...context, ...filters };
+    if (a.place && a.position === undefined) context.position = null;
     result = await repo.search({ ...context, limit: 8 });
     actions.push({ type: "search", filters });
+    actions.push({ type: "results", products: result.products });
+    result.products = result.products.map(summary);
   } else if (name === "compare_products") {
     const products = await repo.compare(a.productIds);
     result = products.map((p) => ({
@@ -103,6 +132,7 @@ export async function executeTool(
   } else if (name === "find_sellers") {
     const { productId: selectedProduct, sort: sellerSort, ...filters } = a;
     context = { ...context, ...filters, selectedId: selectedProduct };
+    if (a.place && a.position === undefined) context.position = null;
     result = await repo.sellers({
       ...context,
       ...a,
@@ -117,12 +147,14 @@ export async function executeTool(
           radius: context.radius,
           installment: context.installment,
           onlyOpen: context.onlyOpen,
+          position: context.position,
         },
       },
       { type: "select", product: summary(await repo.product(a.productId)) },
+      { type: "sellers", offers: result.offers },
     );
   } else if (name === "get_shop_details") result = await repo.shop(a.shopId);
-  else if (name === "request_inquiry")
+  else if (name === "request_inquiry") {
     result = await repo.inquiry(
       ctx.owner,
       ctx.thread,
@@ -130,11 +162,53 @@ export async function executeTool(
       a.offerId,
       ctx.callId,
     );
-  else
+    const product = await repo.product(a.productId);
+    const offer = product.offers?.find((o) => o.id === a.offerId);
+    result = {
+      ...result,
+      productTitle: product.title,
+      shop: await repo.shop(offer.shop),
+      price: offer.price,
+      priceLabel: money(offer.price),
+      changed: offer.changed,
+    };
+    actions.push({ type: "inquiry", inquiry: result });
+  } else if (name === "suggest_market_areas") {
+    const catalogue = await repo.search({ query: a.query, limit: 8 });
+    const areas = areasFor(a.query);
+    const related = catalogue.total
+      ? null
+      : await repo.search({
+          query: "",
+          category: areas[0]?.category || inferCategory(a.query) || a.query,
+          limit: 4,
+        });
+    result = {
+      catalogue,
+      related,
+      areas,
+      note: "نتایج دیتاست مقدم‌اند. گزینه‌های مشابه مدل درخواستی نیستند. ناحیه بیرونی نشانه موجودی محصول نیست.",
+    };
+    actions.push({ type: "markets", areas, catalogue: catalogue.products });
+    if (related?.products.length)
+      actions.push({ type: "results", products: related.products });
+  } else {
     result = await repo.alternatives(
       a.productId,
       a.budget ?? context.budget,
       a.excludeShopId,
+      context,
     );
+    actions.push(
+      { type: "results", products: result.products },
+      { type: "sellers", offers: result.sameProductSellers },
+    );
+  }
+  if (result?.offers)
+    result.offers = result.offers.map((o: any) => ({
+      ...o,
+      priceLabel: money(o.price),
+      currency: "تومان",
+    }));
   return { result, actions, context: contextSchema.parse(context) };
 }

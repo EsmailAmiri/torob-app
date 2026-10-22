@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createModel, modelConfig, toChatMessages } from "../server/model";
+import { toolDefinitions } from "../server/tools";
+test("Tool JSON schemas avoid tuple items arrays unsupported by the configured router", () => {
+  const visit = (value: any) => {
+    if (!value || typeof value !== "object") return;
+    assert.equal(Array.isArray(value.items), false);
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(toolDefinitions);
+});
 test("9router requires URL, key and model and defaults to chat completions", () => {
   assert.equal(
     modelConfig({ LLM_PROVIDER: "9router", LLM_API_KEY: "test" }).configured,

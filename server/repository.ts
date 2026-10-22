@@ -1,12 +1,21 @@
 import { z } from "zod";
-import { normalize, places, distance, hoursStatus } from "../src/catalogue.js";
-import type { Sql, Product, StoredSession } from "./types";
+import {
+  normalize,
+  places,
+  distance,
+  hoursStatus,
+  hasInPersonCredit,
+  inferCategory,
+} from "../src/catalogue.js";
+import type { Sql, Product, StoredSession, SearchContext } from "./types";
+import shopLinks from "../src/shop-links.json";
 export const productId = z.string().regex(/^product_[a-f0-9]{24}$/);
 export const shopId = z.string().regex(/^shop_[a-f0-9]{24}$/);
 export const searchSchema = z.object({
   query: z.string().trim().max(160).default(""),
   budget: z.number().finite().positive().max(1e13).nullable().optional(),
   brand: z.string().max(80).optional(),
+  category: z.string().max(160).optional(),
   sort: z.enum(["recommended", "price"]).default("recommended"),
   limit: z.number().int().min(1).max(60).default(20),
   offset: z.number().int().min(0).max(10000).default(0),
@@ -32,6 +41,11 @@ export class Repository {
     const terms = normalize(args.query).match(/[\p{L}\p{N}]+/gu) || [];
     const params: unknown[] = [];
     const conditions: string[] = [];
+    const category = args.category || inferCategory(args.query);
+    if (category) {
+      conditions.push("p.category = ?");
+      params.push(category);
+    }
     if (terms.length) {
       conditions.push(
         "p.rowid IN (SELECT rowid FROM product_search WHERE product_search MATCH ?)",
@@ -77,7 +91,10 @@ export class Repository {
     shopId.parse(id);
     const rows = await this.db.all("SELECT data FROM shops WHERE id=?", [id]);
     if (!rows.length) throw new NotFound("فروشگاه در دیتاست پیدا نشد.");
-    return JSON.parse(rows[0].data);
+    return {
+      ...JSON.parse(rows[0].data),
+      ...(shopLinks as Record<string, any>)[id],
+    };
   }
   async compare(ids: string[]) {
     z.array(productId).min(2).max(3).parse(ids);
@@ -91,6 +108,10 @@ export class Repository {
     onlyOpen?: boolean;
     sort?: "price" | "distance";
     limit?: number;
+    budget?: number | null;
+    position?: [number, number] | null;
+    excludeShopId?: string;
+    excludedShopIds?: string[];
   }) {
     const p = await this.product(input.productId);
     const offers = p.offers || [];
@@ -110,7 +131,9 @@ export class Repository {
       );
     const byId = new Map(shops.map((r) => [r.id, JSON.parse(r.data)]));
     const center =
-      places[input.place as keyof typeof places] || places["مرکز تهران"];
+      input.position ||
+      places[input.place as keyof typeof places] ||
+      places["مرکز تهران"];
     let rows = offers.flatMap((o) => {
       const shop = byId.get(o.shop);
       if (!shop) return [];
@@ -123,14 +146,20 @@ export class Repository {
           distance: km,
           hours,
           inventory: "unverified",
+          paymentChannelDeclared: hasInPersonCredit(shop),
           paymentChannelVerified: false,
         },
       ];
     });
     rows = rows.filter(
       (o) =>
-        (o.distance == null || o.distance <= (input.radius ?? 30)) &&
-        (!input.installment || o.shop.payment_options?.length > 0) &&
+        o.shop.shop_id !== input.excludeShopId &&
+        !input.excludedShopIds?.includes(o.shop.shop_id) &&
+        (input.budget == null ||
+          (o.price != null && o.price <= input.budget)) &&
+        o.distance != null &&
+        o.distance <= (input.radius ?? 30) &&
+        (!input.installment || hasInPersonCredit(o.shop)) &&
         (!input.onlyOpen || o.hours.state === "open"),
     );
     rows.sort(
@@ -141,23 +170,57 @@ export class Repository {
     return {
       product: { id: p.id, title: p.title },
       total: rows.length,
+      registeredOfferCount: offers.length,
+      filters: {
+        place: input.place,
+        radius: input.radius,
+        budget: input.budget,
+        installment: input.installment,
+        onlyOpen: input.onlyOpen,
+      },
       offers: rows.slice(0, input.limit ?? 20),
-      note: "فاصله مستقیم است؛ آفر و ساعت کاری ثبت‌شده تأیید موجودی یا قیمت امروز نیست.",
+      note: "نتیجه صفر فقط یعنی با فیلترهای فعلی آفر مطابق نیست، نه اینکه محصول هیچ فروشنده‌ای ندارد. کانال حضوری صرفاً اعلام‌شده است، نه تأییدشده. فاصله مستقیم است؛ آفر و ساعت کاری ثبت‌شده تأیید موجودی یا قیمت امروز نیست.",
     };
   }
   async alternatives(
     id: string,
     budget?: number | null,
     excludeShopId?: string,
+    context: {
+      place?: string;
+      radius?: number;
+      installment?: boolean;
+      onlyOpen?: boolean;
+      position?: [number, number] | null;
+      brand?: string;
+      excludedShopIds?: string[];
+    } = {},
   ) {
     const p = await this.product(id);
-    const related = await this.search({ query: p.category, budget, limit: 8 });
-    const same = await this.sellers({ productId: id, limit: 30 });
+    const related = await this.search({
+      query: "",
+      category: p.category,
+      brand: context.brand || p.brand || "",
+      budget,
+      limit: 60,
+    });
+    related.products.sort(
+      (a, b) =>
+        Math.abs((a.price ?? Infinity) - (p.price || 0)) -
+        Math.abs((b.price ?? Infinity) - (p.price || 0)),
+    );
+    const same = await this.sellers({
+      ...context,
+      productId: id,
+      budget,
+      excludeShopId,
+      limit: 30,
+    });
     return {
       sameProductSellers: same.offers
         .filter((o) => o.shop.shop_id !== excludeShopId)
         .slice(0, 8),
-      products: related.products.filter((x) => x.id !== id),
+      products: related.products.filter((x) => x.id !== id).slice(0, 8),
       note: "موجودی هیچ گزینه‌ای تأیید نشده است.",
     };
   }
@@ -199,6 +262,26 @@ export class Repository {
     offerId: string,
     id: string,
   ) {
+    if (!/^[a-f0-9-]{36}$/i.test(id)) {
+      const bytes = new Uint8Array(
+        await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(owner + ":" + thread + ":" + id),
+        ),
+      );
+      bytes[6] = (bytes[6] & 15) | 64;
+      bytes[8] = (bytes[8] & 63) | 128;
+      const hex = Array.from(bytes.slice(0, 16), (b) =>
+        b.toString(16).padStart(2, "0"),
+      ).join("");
+      id = [
+        hex.slice(0, 8),
+        hex.slice(8, 12),
+        hex.slice(12, 16),
+        hex.slice(16, 20),
+        hex.slice(20),
+      ].join("-");
+    }
     const p = await this.product(product);
     const offer = p.offers?.find((o) => o.id === offerId);
     if (!offer) throw new NotFound("آفر مربوط به این محصول پیدا نشد.");
@@ -217,13 +300,123 @@ export class Repository {
         "شماره‌های دیتاست جعلی‌اند. هیچ تماس یا پیامی ارسال نشده؛ پاسخ فقط با انتخاب صریح سناریوی آزمایشی ثبت می‌شود.",
     };
   }
-  async simulate(owner: string, id: string, status: string) {
+  async simulate(
+    owner: string,
+    id: string,
+    status: string,
+    context?: SearchContext,
+  ) {
+    const [inquiry] = await this.db.all(
+      "SELECT * FROM inquiries WHERE owner=? AND id=?",
+      [owner, id],
+    );
+    if (!inquiry) throw new NotFound("استعلام پیدا نشد.");
+    const product = await this.product(inquiry.product_id);
+    const offer = product.offers?.find((o) => o.id === inquiry.offer_id);
+    const shop = await this.shop(offer.shop);
     const r = await this.db.run(
       "UPDATE inquiries SET status=?,updated=? WHERE owner=? AND id=?",
       [status, Date.now(), owner, id],
     );
     if (!r.changes) throw new NotFound("استعلام پیدا نشد.");
-    return { id, status, mode: "simulation", inventory: "unverified" };
+    await this.lock(owner, inquiry.thread);
+    try {
+      const session = await this.loadSession(owner, inquiry.thread);
+      if (context)
+        session.context = {
+          ...context,
+          excludedShopIds: session.context?.excludedShopIds || [],
+        };
+      if (status !== "available_demo")
+        session.context = {
+          query: "",
+          budget: null,
+          brand: "",
+          place: "مرکز تهران",
+          radius: 30,
+          installment: false,
+          onlyOpen: false,
+          sort: "recommended",
+          selectedId: product.id,
+          compareIds: [],
+          ...session.context,
+          excludedShopIds: [
+            ...new Set([
+              ...(session.context?.excludedShopIds || []),
+              shop.shop_id,
+            ]),
+          ].slice(-30),
+        };
+      const alternatives =
+        status === "available_demo"
+          ? null
+          : await this.alternatives(
+              product.id,
+              session.context?.budget,
+              shop.shop_id,
+              session.context,
+            );
+      const message =
+        status === "available_demo"
+          ? "پاسخ فرضی فروشنده: موجود است. قیمت و ساعت زیر از دیتاست‌اند؛ این پاسخ تأیید واقعی نیست."
+          : status === "noanswer_demo"
+            ? "در سناریوی آزمایشی فروشنده پاسخ نداد. گزینه‌های جایگزین با حفظ شرایط خرید بررسی شدند."
+            : "در سناریوی آزمایشی کالا ناموجود است. گزینه‌های جایگزین با حفظ شرایط خرید بررسی شدند.";
+      const demoResponse = {
+        label: "پاسخ فرضی؛ بدون تماس واقعی",
+        price: offer.price,
+        changed: offer.changed,
+        hours: shop.weekly_hours || null,
+        availability:
+          status === "available_demo" ? "available_demo" : "unknown",
+        source: "dataset_and_user_simulation",
+      };
+      const actions: any[] = [
+        {
+          type: "inquiry",
+          inquiry: {
+            id,
+            status,
+            productId: product.id,
+            offerId: offer.id,
+            productTitle: product.title,
+            shop,
+            mode: "simulation",
+            inventory: "unverified",
+            demoResponse,
+          },
+        },
+      ];
+      if (alternatives)
+        actions.push(
+          { type: "sellers", offers: alternatives.sameProductSellers },
+          { type: "results", products: alternatives.products },
+        );
+      if (inquiry.status !== status) {
+        session.history = [
+          ...session.history.slice(-5),
+          [
+            {
+              role: "user",
+              content: `نتیجه شبیه‌سازی استعلام فروشگاه ${shop.name}: ${status === "available_demo" ? "موجود است" : status === "noanswer_demo" ? "عدم پاسخ" : "ناموجود"}`,
+            },
+            { role: "assistant", content: message, ui_actions: actions },
+          ],
+        ];
+        await this.saveSession(owner, inquiry.thread, session);
+      }
+      return {
+        id,
+        status,
+        mode: "simulation",
+        inventory: "unverified",
+        message,
+        demoResponse,
+        actions,
+      };
+    } finally {
+      await this.unlock(owner, inquiry.thread);
+    }
   }
   async importProducts(key: string, products: Record<string, Product>) {
     const statements = Object.values(products).map((p) => {

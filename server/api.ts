@@ -5,6 +5,13 @@ import { runAgent, PendingTurnError } from "./agent";
 import type { Runtime, Sql } from "./types";
 import { modelConfig } from "./model";
 const uuid = z.string().uuid();
+function sessionActions(item: any, reply: any) {
+  const text = item.content
+    ?.filter((c: any) => c.type === "output_text")
+    .map((c: any) => c.text)
+    .join("\n");
+  return item.ui_actions || (text === reply?.text ? reply.actions : []);
+}
 export const json = (data: unknown, status = 200) =>
   Response.json(data, {
     status,
@@ -92,6 +99,7 @@ export async function handleApi(
       const args = {
         query: url.searchParams.get("query") ?? "",
         brand: url.searchParams.get("brand") ?? "",
+        category: url.searchParams.get("category") ?? "",
         budget: url.searchParams.has("budget")
           ? Number(url.searchParams.get("budget"))
           : undefined,
@@ -159,10 +167,17 @@ export async function handleApi(
                 ?.filter((c: any) => c.type === "output_text")
                 .map((c: any) => c.text)
                 .join("\n"),
+              actions: sessionActions(item, state.lastReply),
             },
           ];
         if (item.role === "assistant" && typeof item.content === "string")
-          return [{ role: "assistant", text: item.content }];
+          return [
+            {
+              role: "assistant",
+              text: item.content,
+              actions: item.ui_actions || [],
+            },
+          ];
         return [];
       });
       return json({
@@ -203,9 +218,12 @@ export async function handleApi(
             "unavailable_demo",
             "noanswer_demo",
           ]),
+          context: contextSchema.optional(),
         })
         .parse(await body(request));
-      return json(await repo.simulate(owner, inquiryMatch[1], data.status));
+      return json(
+        await repo.simulate(owner, inquiryMatch[1], data.status, data.context),
+      );
     }
     if (url.pathname === "/api/admin/import" && request.method === "POST") {
       if (env.CATALOG_IMPORT_ENABLED !== "true" || !options.importAsset)
