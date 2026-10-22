@@ -235,6 +235,13 @@ export async function runAgent(options: {
         result.input,
         result.context.budget,
       );
+      const inquiryAction = result.actions.findLast(
+        (a: any) => a.type === "inquiry",
+      );
+      if (inquiryAction?.type === "inquiry") {
+        const inquiry = inquiryAction.inquiry;
+        result.text = `برای «${inquiry.productTitle}» کارت استعلام آزمایشی فروشگاه «${inquiry.shop.name}» ساخته شد.\n\nقیمت ثبت‌شده: ${money(inquiry.price)}\n\nاز کارت زیر یکی از پاسخ‌های فرضی «موجود است»، «ناموجود» یا «عدم پاسخ» را انتخاب کن. در دو حالت آخر، فروشنده جایگزین و مدل‌های مشابه با حفظ شرایط خرید بررسی می‌شوند.\n\nهیچ تماس یا پیامی ارسال نشده و موجودی یا قیمت امروز تأیید نمی‌شود.`;
+      }
       // Persist the same grounded text the user saw, never the unvalidated draft.
       const finalMessage = result.input.findLast(
         (o: any) => o.type === "message",

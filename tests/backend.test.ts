@@ -556,6 +556,55 @@ test("A model summary failure returns usable grounded results without trapping t
     db.close();
   }
 });
+test("Inquiry reply uses exactly the supported mock outcomes rather than invented model controls", async () => {
+  const { db, repo } = await fixture();
+  let calls = 0;
+  try {
+    const reply = await runAgent({
+      repo,
+      env: {},
+      owner: "a",
+      threadId: randomUUID(),
+      requestId: randomUUID(),
+      context: contextSchema.parse({}),
+      message: "استعلام آزمایشی",
+      model: {
+        async respond() {
+          calls++;
+          return calls === 1
+            ? [
+                {
+                  type: "function_call",
+                  call_id: "inquiry_call",
+                  name: "request_inquiry",
+                  arguments: JSON.stringify({
+                    productId: id("product", 1),
+                    offerId: id("offer", 1),
+                  }),
+                },
+              ]
+            : [
+                {
+                  type: "message",
+                  content: [
+                    {
+                      type: "output_text",
+                      text: "گزینه افزایش قیمت را انتخاب کن",
+                    },
+                  ],
+                },
+              ];
+        },
+      },
+    });
+    assert.doesNotMatch(reply.text, /افزایش قیمت/);
+    assert.match(reply.text, /عدم پاسخ/);
+    assert.match(reply.text, /ناموجود/);
+    assert.match(reply.text, /موجود است/);
+  } finally {
+    db.close();
+  }
+});
 test("No key produces an explicitly local answer using database tools", async () => {
   const { db, repo } = await fixture();
   try {
