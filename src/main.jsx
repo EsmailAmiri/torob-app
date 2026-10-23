@@ -9,6 +9,9 @@ import { createRoot } from "react-dom/client";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import AssistantCards from "./AssistantCards";
+import VisitPlan from "./VisitPlan";
+import { visitPlan } from "./visit-plan";
+import { addressGuide } from "./address-guide";
 import shopLinks from "./shop-links.json";
 import {
   Search,
@@ -196,13 +199,14 @@ function Modal({ title, children, onClose, wide = false }) {
     </div>
   );
 }
-function MapView({ offers, center, onSelect }) {
+function MapView({ offers, center, onSelect, onSetCenter }) {
   const container = useRef(null),
     map = useRef(null);
   const [error, setError] = useState(false);
   useEffect(() => {
     let disposed = false;
     let current;
+    let resizeTimer;
     Promise.all([import("leaflet"), import("leaflet/dist/leaflet.css")])
       .then(([module]) => {
         if (disposed || !container.current) return;
@@ -211,6 +215,11 @@ function MapView({ offers, center, onSelect }) {
           center,
           12,
         );
+        current.on("click", (event) => {
+          const { lat, lng } = event.latlng;
+          if (lat >= 35.4 && lat <= 35.95 && lng >= 51 && lng <= 51.8)
+            onSetCenter([lat, lng]);
+        });
         map.current = current;
         L.control.zoom({ position: "bottomleft" }).addTo(current);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -249,16 +258,21 @@ function MapView({ offers, center, onSelect }) {
           current.fitBounds(L.latLngBounds([...points, center]), {
             padding: [50, 60],
             maxZoom: 14,
+            animate: false,
           });
-        setTimeout(() => current?.invalidateSize(), 100);
+        resizeTimer = setTimeout(() => {
+          if (!disposed) current?.invalidateSize({ animate: false });
+        }, 100);
       })
       .catch(() => setError(true));
     return () => {
       disposed = true;
+      clearTimeout(resizeTimer);
+      current?.stop();
       current?.remove();
       map.current = null;
     };
-  }, [offers, center, onSelect]);
+  }, [offers, center, onSelect, onSetCenter]);
   return (
     <div className="map-shell">
       <div className="map-container" ref={container} />
@@ -266,6 +280,7 @@ function MapView({ offers, center, onSelect }) {
         <span className="blue-dot" /> محدوده انتخابی{" "}
         <span className="red-dot" /> فروشگاه‌های دارای آفر
       </span>
+      <span className="map-instruction">برای تغییر مبدأ خرید، روی نقشه بزنید.</span>
       {error ? (
         <span className="map-error">
           نقشه به اینترنت نیاز دارد؛ آدرس فروشگاه‌ها در فهرست در دسترس است.
@@ -717,6 +732,10 @@ function App() {
       ),
     [offerRows, installment, onlyOpen, radius, budget],
   );
+  const plan = useMemo(
+    () => visitPlan(offerRows, { center, radius: Number(radius), budget, installment, onlyOpen, query: query + " " + (detail?.title || "") }),
+    [offerRows, center, radius, budget, installment, onlyOpen, detail?.title, query],
+  );
   const displayProducts = showSaved
     ? saved
     : loading
@@ -725,6 +744,10 @@ function App() {
         : []
       : products;
   const mapSelect = React.useCallback((o) => setShopFocus(o), []);
+  const mapSetCenter = React.useCallback((position) => {
+    setCustomPosition(position);
+    setPlace("مرکز تهران");
+  }, []);
   const activeFilters = [
     budget && `تا ${money(Number(budget))}`,
     brand,
@@ -1450,11 +1473,21 @@ function App() {
                       سفر نیستند.
                     </span>
                   </div>
+                  <VisitPlan
+                    plan={plan}
+                    radius={Number(radius)}
+                    onSeller={(offer) => setShopFocus(offer)}
+                    onExpand={(offer) => {
+                      setRadius(Math.min(30, Math.max(Number(radius), Math.ceil(offer.distance))));
+                      setView("map");
+                    }}
+                  />
                   {view === "map" ? (
                     <MapView
                       offers={visibleOffers}
                       center={center}
                       onSelect={mapSelect}
+                      onSetCenter={mapSetCenter}
                     />
                   ) : null}
                   {!shops ? (
@@ -2039,6 +2072,17 @@ function App() {
               <MapPin size={17} />
               {shopFocus.shop.address || "آدرس ثبت نشده"}
             </p>
+            {addressGuide(shopFocus.shop.address) ? (
+              <div className="address-guide">
+                <strong><Store size={16} /> راهنمای پیدا کردن فروشگاه در ساختمان</strong>
+                <div>
+                  {Object.entries(addressGuide(shopFocus.shop.address)).filter(([, value]) => value).map(([key, value]) => (
+                    <span key={key}><small>{{ building: "ساختمان / بازار", floor: "طبقه", unit: "واحد / پلاک" }[key]}</small>{value}</span>
+                  ))}
+                </div>
+                <small>این نشانه‌ها عیناً از آدرس ثبت‌شده‌اند؛ مسیر داخل ساختمان ثبت نشده است.</small>
+              </div>
+            ) : null}
             <p>
               <Navigation size={16} />
               {shopFocus.distance != null

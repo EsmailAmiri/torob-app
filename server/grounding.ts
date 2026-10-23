@@ -123,3 +123,11 @@ export function toolSummary(actions: any[]) {
   lines.push("قیمت‌ها تاریخی‌اند؛ موجودی تأیید نشده است.");
   return lines.join("\n\n");
 }
+
+export function groundMissingMarket(text: string, actions: any[], query: string) {
+  const market = actions.findLast((action) => action.type === "markets");
+  if (!market || market.catalogue?.length || !market.areas?.length) return text;
+  const names = market.areas.map((area: any) => `«${area.title}»`).join("، ");
+  const related = actions.some((action) => action.type === "results" && action.products?.length);
+  return `برای «${query}» محصول مطابق در دیتاست پیدا نشد. برای پرس‌وجوی حضوری می‌توانید ${names} را بررسی کنید. نقشه و منبع هر محدوده در کارت زیر آمده است. این پیشنهاد خارج از دیتاست است و موجودی مدل، ساعت کاری و قیمت آن تأیید نشده‌اند.${related ? " چند محصول هم‌دستهٔ دیتاست نیز در کارت‌های جدا نمایش داده شده‌اند؛ آن‌ها همان مدل درخواستی نیستند." : ""}`;
+}

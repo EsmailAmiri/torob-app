@@ -35,6 +35,28 @@ export const marketAreas = [
     reason:
       "ناحیه‌ای برای بررسی کفش و تجهیزات ورزشی؛ تناسب و موجودی باید حضوری بررسی شود.",
   },
+  {
+    id: "books",
+    title: "محدوده میدان و خیابان انقلاب؛ کتاب و نوشت‌افزار",
+    category: "کتاب",
+    position: [35.70094, 51.39117] as [number, number],
+    keywords: /کتاب|رمان|درسی|دانشگاهی|نوشت افزار|لوازم التحریر|دفتر|مداد|خودکار/,
+    source: "https://www.isba.ir/Default/TextDetails/contactus",
+    sourceLabel: "نشانی فروشگاه کتاب جهاد دانشگاهی",
+    reason:
+      "نشانی منتشرشده یک کتاب‌فروشی در خیابان انقلاب، سرنخ بررسی حضوری این محدوده است؛ موجودی عنوان مشخص معلوم نیست.",
+  },
+  {
+    id: "home-appliances",
+    title: "محدوده سه‌راه امین حضور؛ لوازم خانگی",
+    category: "لوازم خانگی",
+    position: [35.68385, 51.43684] as [number, number],
+    keywords: /لوازم خانگی|یخچال|لباسشویی|ماشین ظرفشویی|جاروبرقی|اجاق گاز|کولر|سرخ کن|تلویزیون/,
+    source: "https://aminhozourshop.ir/",
+    sourceLabel: "نشانی منتشرشده فروشگاه امین حضور",
+    reason:
+      "نشانی منتشرشده یک فروشگاه لوازم خانگی در سه‌راه امین حضور، سرنخ بررسی حضوری این محدوده است؛ موجودی مدل مشخص معلوم نیست.",
+  },
 ];
 export function areasFor(query: string) {
   return marketAreas
@@ -43,7 +65,7 @@ export function areasFor(query: string) {
       ...area,
       provenance: "external",
       confidence: "area_only",
-      checkedAt: "2026-10-22",
+      checkedAt: "2026-10-23",
       note: "خارج دیتاست ترب · نقطه تقریبی ناحیه · بدون تأیید موجودی، ساعت یا قیمت",
     }));
 }

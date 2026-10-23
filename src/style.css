@@ -1768,6 +1768,58 @@ input[type="range"] {
   margin-bottom: 16px;
   z-index: 1;
 }
+.map-instruction {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 500;
+  background: #fffefc;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px #0002;
+  padding: 7px 10px;
+  color: #444b55;
+  font-size: 10px;
+  pointer-events: none;
+}
+.visit-plan {
+  border: 1px solid #dce7e3;
+  border-right: 4px solid #247965;
+  background: #f9fcfb;
+  border-radius: 9px;
+  padding: 16px;
+  margin: 0 0 16px;
+  color: #233a36;
+}
+.visit-plan-heading, .visit-plan-choice, .visit-plan-area, .visit-plan-unknown { display: flex; }
+.visit-plan-heading { align-items: center; gap: 10px; margin-bottom: 13px; }
+.visit-plan-heading strong { display: block; font-size: 14px; }
+.visit-plan-heading small, .visit-plan-choice small, .visit-plan-unknown small { display: block; color: #61736f; font-size: 10px; line-height: 1.8; }
+.visit-plan-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: #fff; background: #247965; flex: none; }
+.visit-plan-choice { flex-direction: column; align-items: flex-start; gap: 5px; background: #fff; border: 1px solid #e0ebe6; border-radius: 7px; padding: 12px; }
+.visit-plan-choice > strong { font-size: 13px; }
+.visit-plan-choice p, .visit-plan-area p { margin: 0; line-height: 1.8; font-size: 11px; }
+.visit-plan-choice p span { color: #95a49d; padding: 0 3px; }
+.visit-plan-status { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #986b27; background: #fff6e4; border-radius: 20px; padding: 3px 8px; }
+.visit-plan-status.is-near { color: #247965; background: #eaf6ef; }
+.visit-plan-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.visit-plan-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 6px; background: #247965; color: #fff; font-size: 10px; padding: 8px 10px; cursor: pointer; }
+.visit-plan-actions button.secondary { background: #e9f3ee; color: #247965; }
+.visit-plan-none { display: flex; align-items: flex-start; gap: 7px; margin: 0; font-size: 11px; line-height: 1.8; }
+.visit-plan-none svg { flex: none; margin-top: 2px; }
+.visit-plan-unknown { align-items: center; width: 100%; text-align: right; gap: 9px; background: #fff; border: 1px solid #e0ebe6; border-radius: 7px; padding: 10px; margin-top: 9px; cursor: pointer; color: #233a36; }
+.visit-plan-unknown span { flex: 1; }
+.visit-plan-unknown strong { display: block; font-size: 11px; }
+.visit-plan-area { gap: 9px; margin-top: 12px; border-top: 1px solid #dce7e3; padding-top: 12px; }
+.visit-plan-area > svg { flex: none; margin-top: 2px; color: #247965; }
+.visit-plan-area strong { font-size: 11px; }
+.visit-plan-area a { display: inline-flex; align-items: center; gap: 4px; margin: 5px 0 0 12px; color: #176b58; font-size: 10px; }
+.visit-plan-area a.visit-plan-source { color: #657b72; }
+.visit-plan-footnote { font-size: 9px; line-height: 1.8; color: #6d7d77; margin: 12px 0 0; }
+.address-guide { border: 1px solid #dce7e3; border-radius: 8px; background: #f9fcfb; padding: 12px; margin: 10px 0; }
+.address-guide > strong { display: flex; align-items: center; gap: 6px; color: #1d6657; font-size: 12px; }
+.address-guide > div { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.address-guide > div span { display: flex; flex-direction: column; gap: 3px; flex: 1 1 115px; padding: 8px; border: 1px solid #e4ebe8; border-radius: 6px; background: white; font-size: 11px; }
+.address-guide small { color: #6e7c77; font-size: 9px; line-height: 1.7; }
 .map-container {
   height: 100%;
   width: 100%;
