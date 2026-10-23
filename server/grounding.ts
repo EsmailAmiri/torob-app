@@ -124,6 +124,13 @@ export function toolSummary(actions: any[]) {
   return lines.join("\n\n");
 }
 
+export function groundEmptyRecommendations(text: string, actions: any[], budget?: number | null) {
+  const searches = actions.filter((action) => action.type === "results");
+  if (!budget || !searches.length || searches.some((action) => action.products?.length)) return text;
+  const markets = actions.some((action) => action.type === "markets" && action.areas?.length);
+  return `با سقف بودجهٔ ${money(budget)}، در جست‌وجوهای انجام‌شده محصول مطابقی در دیتاست پیدا نشد. نمی‌توانم مدل جایگزین یا قیمت آن را بدون نتیجهٔ ثبت‌شده تأیید کنم. نام مدل یا برند دیگری را جست‌وجو کن، یا سقف بودجه را تغییر بده.${markets ? " ناحیهٔ خرید پیشنهادی در کارت زیر نمایش داده شده است؛ موجودی و قیمت آن تأیید نشده‌اند." : ""}`;
+}
+
 export function groundMissingMarket(text: string, actions: any[], query: string) {
   const market = actions.findLast((action) => action.type === "markets");
   if (!market || market.catalogue?.length || !market.areas?.length) return text;

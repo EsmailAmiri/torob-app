@@ -5,6 +5,7 @@ dist/
 *.log
 .env*
 !.env.example
+!.env.docker.example
 .dev.vars*
 .wrangler/
 .sites-runtime/

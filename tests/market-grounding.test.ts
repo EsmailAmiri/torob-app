@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { groundCreditSellers, groundMissingMarket } from "../server/grounding";
+import { groundCreditSellers, groundEmptyRecommendations, groundMissingMarket } from "../server/grounding";
+
+test("does not endorse alternatives when every budgeted search is empty", () => {
+  const draft = "سامسونگ A55 و A35 را پیشنهاد می‌کنم.";
+  const grounded = groundEmptyRecommendations(draft, [
+    { type: "results", products: [] },
+    { type: "results", products: [] },
+  ], 60000000);
+  assert.match(grounded, /محصول مطابقی.*پیدا نشد/);
+  assert.doesNotMatch(grounded, /A55|A35/);
+  assert.equal(groundEmptyRecommendations(draft, [{ type: "results", products: [{ id: "p" }] }], 60000000), draft);
+});
 
 test("missing product answer only names sourced market areas", () => {
   const answer = groundMissingMarket(

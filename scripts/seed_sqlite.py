@@ -1,8 +1,8 @@
 """Import the complete verified catalogue into local SQLite. Never commit runtime DBs."""
-import pathlib,sqlite3,json,gzip,re,sys,time
+import pathlib,sqlite3,json,gzip,re,sys,time,os
 sys.stdout.reconfigure(encoding='utf-8')
 root=pathlib.Path(__file__).resolve().parents[1]
-target=root/'runtime'/'torob.sqlite';target.parent.mkdir(exist_ok=True)
+target=pathlib.Path(os.environ.get('DATABASE_PATH',str(root/'runtime'/'torob.sqlite')));target.parent.mkdir(parents=True,exist_ok=True)
 db=sqlite3.connect(target)
 db.execute('PRAGMA journal_mode=WAL')
 db.execute('CREATE TABLE IF NOT EXISTS __local_migrations(name TEXT PRIMARY KEY)')
@@ -30,4 +30,6 @@ db.commit()
 count=db.execute('SELECT COUNT(*) FROM products').fetchone()[0]
 assert count==225903
 print('SQLite ready:',count,'products,',len(shops),'shops')
+db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+db.execute('PRAGMA journal_mode=DELETE')
 db.close()

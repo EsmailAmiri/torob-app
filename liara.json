@@ -1,0 +1,11 @@
+{
+  "app": "project03-tor",
+  "platform": "docker",
+  "port": 8787,
+  "disks": [
+    {
+      "name": "torob-runtime",
+      "mountTo": "/app/runtime"
+    }
+  ]
+}

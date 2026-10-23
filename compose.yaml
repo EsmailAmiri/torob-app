@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    image: torob-hamrah:local
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      DATABASE_PATH: /app/runtime/torob.sqlite
+      APP_PUBLIC_MODE: "true"
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - torob-runtime:/app/runtime
+    restart: unless-stopped
+
+volumes:
+  torob-runtime:

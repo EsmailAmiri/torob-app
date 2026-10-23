@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
@@ -13,12 +14,14 @@ const sql = sqliteAdapter(db);
 const root = resolve("dist/client");
 const host = process.env.HOST || "127.0.0.1",
   port = Number(process.env.PORT || 8787);
+const publicMode = process.env.APP_PUBLIC_MODE === "true";
 if (
   !["127.0.0.1", "localhost", "::1"].includes(host) &&
-  !process.env.APP_ACCESS_TOKEN
+  !process.env.APP_ACCESS_TOKEN &&
+  !publicMode
 )
   throw Error(
-    "Set APP_ACCESS_TOKEN or use an authenticated reverse proxy before exposing the API. Default HOST=127.0.0.1 is supported without a token.",
+    "Set APP_PUBLIC_MODE=true or APP_ACCESS_TOKEN before binding a network interface.",
   );
 const mime: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -34,8 +37,12 @@ const mime: Record<string, string> = {
 const server = createServer(async (req, res) => {
   try {
     const authority = req.headers.host || `127.0.0.1:${port}`;
-    const url = new URL(req.url || "/", `http://${authority}`);
+    const url = new URL(
+      req.url || "/",
+      process.env.APP_ORIGIN || `http://${authority}`,
+    );
     let response: Response;
+    let setCookie: string | undefined;
     if (url.pathname.startsWith("/api/")) {
       if (
         process.env.APP_ACCESS_TOKEN &&
@@ -43,6 +50,14 @@ const server = createServer(async (req, res) => {
       ) {
         response = json({ error: "دسترسی مجاز نیست." }, 401);
       } else {
+        const cookie = req.headers.cookie
+          ?.split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith("torob_owner="))
+          ?.slice("torob_owner=".length);
+        const owner = cookie && /^[a-f0-9-]{36}$/.test(cookie) ? cookie : randomUUID();
+        if (owner !== cookie)
+          setCookie = `torob_owner=${owner}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${url.protocol === "https:" ? "; Secure" : ""}`;
         const chunks: Buffer[] = [];
         let length = 0;
         for await (const c of req) {
@@ -64,7 +79,7 @@ const server = createServer(async (req, res) => {
         response = await handleApi(request, {
           db: sql,
           env: process.env,
-          owner: "local-owner",
+          owner,
         });
       }
     } else {
@@ -88,7 +103,9 @@ const server = createServer(async (req, res) => {
         },
       });
     }
-    res.writeHead(response.status, Object.fromEntries(response.headers));
+    const headers = Object.fromEntries(response.headers);
+    if (setCookie) headers["Set-Cookie"] = setCookie;
+    res.writeHead(response.status, headers);
     res.end(Buffer.from(await response.arrayBuffer()));
   } catch {
     res.writeHead(500, { "Content-Type": "application/json" });
