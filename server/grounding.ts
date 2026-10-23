@@ -1,4 +1,4 @@
-import { money, normalize } from "../src/catalogue.js";
+import { fa, money, normalize } from "../src/catalogue.js";
 
 export function groundPrices(
   text: string,
@@ -130,4 +130,26 @@ export function groundMissingMarket(text: string, actions: any[], query: string)
   const names = market.areas.map((area: any) => `«${area.title}»`).join("، ");
   const related = actions.some((action) => action.type === "results" && action.products?.length);
   return `برای «${query}» محصول مطابق در دیتاست پیدا نشد. برای پرس‌وجوی حضوری می‌توانید ${names} را بررسی کنید. نقشه و منبع هر محدوده در کارت زیر آمده است. این پیشنهاد خارج از دیتاست است و موجودی مدل، ساعت کاری و قیمت آن تأیید نشده‌اند.${related ? " چند محصول هم‌دستهٔ دیتاست نیز در کارت‌های جدا نمایش داده شده‌اند؛ آن‌ها همان مدل درخواستی نیستند." : ""}`;
+}
+
+export function groundCreditSellers(text: string, actions: any[], installment: boolean) {
+  if (!installment || actions.some((action) => action.type === "inquiry")) return text;
+  const sellers = actions.findLast((action) => action.type === "sellers");
+  if (!sellers) return text;
+  if (!sellers.offers?.length)
+    return "با فیلتر خرید اعتباری حضوری، آفر مطابقی پیدا نشد. بودجه، محدوده یا شرط ساعت کاری را تغییر بده. دادهٔ پرداخت و موجودی هیچ فروشگاهی تأیید روز نیست.";
+  const product = actions.findLast((action) => action.type === "select")?.product;
+  const lines = [
+    `${product ? `برای «${product.title}» ` : ""}${fa(sellers.offers.length)} آفر با کانال اعتباری حضوریِ اعلام‌شده پیدا شد:`,
+  ];
+  for (const offer of sellers.offers.slice(0, 3)) {
+    const services = offer.shop.payment_options
+      ?.filter((option: any) => ["in_person", "offline", "inperson", "physical"].includes(option.channel))
+      .map((option: any) => option.provider_name)
+      .filter(Boolean)
+      .join("، ");
+    lines.push(`${offer.shop.name}: ${money(offer.price)}؛ ${offer.distance == null ? "فاصله نامشخص" : `${fa(offer.distance.toFixed(1))} کیلومتر فاصله مستقیم`}؛ ${offer.hours?.label || "ساعت کاری نامشخص"}؛ سرویس اعلام‌شده: ${services || "نامشخص"}.`);
+  }
+  lines.push("آفر، ساعت و پذیرندگی اعتباری اطلاعات ثبت‌شده‌اند؛ موجودی، قیمت امروز و شرایط نهایی خرید را پیش از مراجعه بررسی کن.");
+  return lines.join("\n\n");
 }
